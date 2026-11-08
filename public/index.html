@@ -338,7 +338,8 @@ async function watchProgress() {
     box.hidden = false;
     box.innerHTML =
       (pending ? `⏳ 読み取り中 ${active.reduce((a, u) => a + u.done + u.failed, 0)}/${active.reduce((a, u) => a + u.pages_total, 0)}ページ` : "") +
-      (failed ? ` <span title="${h(ups.map((u) => u.errors).filter(Boolean).join("\n"))}">⚠️ 失敗 ${failed}ページ</span> <button class="btn btn-sub" id="btnRetry" style="padding:2px 8px">失敗分を読み直す</button>` : "");
+      (failed ? ` ⚠️ 失敗 ${failed}ページ <button class="btn btn-sub" id="btnRetry" style="padding:2px 8px">失敗分を読み直す</button>
+        <div style="margin-top:4px;padding:4px 6px;background:#fff;color:#a00;border-radius:3px;max-width:640px;white-space:pre-wrap;user-select:text">失敗の理由：\n${h(ups.filter((u) => u.errors).map((u) => `【${u.filename}】 ${u.errors}`).join("\n"))}</div>` : "");
     if (failed) $("btnRetry").onclick = async () => { await fetch("/api/uploads/retry", { method: "POST" }); watchProgress(); };
   } else box.hidden = true;
   if (done !== lastDone) { if (lastDone >= 0) load(); lastDone = done; }
