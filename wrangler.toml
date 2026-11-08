@@ -10,7 +10,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "car-auction-db"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "019ec975-0d2e-4ac5-a707-73ff6b1e23d9"
 
 [[r2_buckets]]
 binding = "PDFS"
