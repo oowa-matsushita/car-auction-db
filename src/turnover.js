@@ -100,6 +100,28 @@ export function modelName(name) {
 // 同じ車とみなすための鍵（大文字小文字・ハイフン・空白の違いを無視）
 const modelKey = (name) => modelName(name).toUpperCase().replace(/[\s\-‐－]/g, "");
 
+// 月初在庫と販売の車名を、車の種類ごとにまとめて数える
+function groupModels(stockRows, soldRows) {
+  const groups = new Map();
+  const add = (name, field) => {
+    const key = modelKey(name);
+    if (!key) return;
+    const g = groups.get(key) || { key, names: {}, opening: 0, sold: 0 };
+    const disp = modelName(name);
+    g.names[disp] = (g.names[disp] || 0) + 1;
+    g[field]++;
+    groups.set(key, g);
+  };
+  stockRows.forEach((r) => add(r.car_name, "opening"));
+  soldRows.forEach((r) => add(r.car_name, "sold"));
+  return [...groups.values()].map((g) => ({
+    key: g.key,
+    name: Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0], // いちばん多い書き方で表示
+    opening: g.opening, sold: g.sold,
+    rate: g.opening ? g.sold / g.opening : null,
+  }));
+}
+
 export async function handleTurnover(request, env, url) {
   const path = url.pathname, method = request.method, db = env.DB;
 
@@ -179,25 +201,27 @@ export async function handleTurnover(request, env, url) {
     const month = mm[1];
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
     const { results: sold } = await db.prepare("SELECT car_name FROM sales_items WHERE month = ?").bind(month).all();
-    const groups = new Map();
-    const add = (name, field) => {
-      const key = modelKey(name);
-      if (!key) return;
-      const g = groups.get(key) || { names: {}, opening: 0, sold: 0 };
-      const disp = modelName(name);
-      g.names[disp] = (g.names[disp] || 0) + 1;
-      g[field]++;
-      groups.set(key, g);
-    };
-    stock.forEach((r) => add(r.car_name, "opening"));
-    sold.forEach((r) => add(r.car_name, "sold"));
-    const models = [...groups.values()].map((g) => ({
-      name: Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0], // いちばん多い書き方で表示
-      opening: g.opening, sold: g.sold,
-      rate: g.opening ? g.sold / g.opening : null,
-    }));
+    const models = groupModels(stock, sold);
     models.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.sold - a.sold || a.name.localeCompare(b.name, "ja"));
     return json({ month, opening: stock.length, sold: sold.length, models });
+  }
+
+  // 車の種類ごとの回転率の推移（月初在庫と販売データがそろっている月だけ）
+  if (path === "/api/turnover/history" && method === "GET") {
+    const { results: months } = await db.prepare(
+      "SELECT m.month FROM inv_months m WHERE EXISTS (SELECT 1 FROM sales_items s WHERE s.month = m.month) ORDER BY m.month"
+    ).all();
+    const out = { months: [], models: {} };
+    for (const { month } of months) {
+      const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
+      const { results: sold } = await db.prepare("SELECT car_name FROM sales_items WHERE month = ?").bind(month).all();
+      out.months.push({ month, opening: stock.length, sold: sold.length, rate: stock.length ? sold.length / stock.length : null });
+      for (const g of groupModels(stock, sold)) {
+        const m = (out.models[g.key] ||= { name: g.name, points: {} });
+        m.points[month] = { opening: g.opening, sold: g.sold, rate: g.rate };
+      }
+    }
+    return json(out);
   }
 
   // その月の販売データ一覧

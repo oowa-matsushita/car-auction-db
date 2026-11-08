@@ -90,6 +90,13 @@
   .tv-rate { font-weight: 800; font-size: 15px; color: #0b2b87; }
   .tv-bar { height: 10px; background: var(--accent); border-radius: 5px; min-width: 2px; }
   .tv-table tbody tr.sel td { background: #fff5c4; }
+  #tvModelRows tr { cursor: pointer; }
+  .tv-pop { position: fixed; z-index: 60; display: none; width: 360px; background: #fff; border: 1px solid #b9c3d1; border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(10,20,40,.22); padding: 10px 12px; pointer-events: none; }
+  .tv-pop b { font-size: 14px; }
+  .tv-tip { position: fixed; z-index: 70; display: none; background: #172033; color: #fff; font-size: 12px; line-height: 1.5;
+    padding: 6px 9px; border-radius: 6px; pointer-events: none; white-space: nowrap; }
+  .tv-chart text { font-family: inherit; }
   .tv-link { color: #0646b0; cursor: pointer; text-decoration: underline; }
   .tv-dim { color: #99a; }
 </style>
@@ -157,9 +164,15 @@
       </div>
       <div class="empty" id="tvEmpty" hidden>まだデータがありません。月初在庫・販売データのCSVを上の枠にドロップしてください。</div>
     </div>
+    <div class="tv-card" id="tvChartCard" hidden>
+      <div style="display:flex;align-items:center;gap:8px"><h2 id="tvChartTitle" style="margin:0"></h2><span style="flex:1"></span>
+        <button class="btn btn-sub" id="tvChartClose" style="padding:2px 10px">閉じる ✕</button></div>
+      <div id="tvChartBody" style="position:relative;margin-top:8px"></div>
+      <details style="margin-top:6px"><summary class="tv-note" style="cursor:pointer">数字で見る</summary><div id="tvChartTable" style="overflow:auto"></div></details>
+    </div>
     <div class="tv-card" id="tvModelCard" hidden>
       <h2 id="tvModelTitle"></h2>
-      <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。</div>
+      <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名にマウスを乗せると回転率の推移のグラフ、押すと大きなグラフが出ます。</div>
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
       <div style="overflow:auto;max-height:60vh">
         <table class="tv-table" style="min-width:0;width:auto"><thead><tr><th style="min-width:200px">車名</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th style="width:200px"></th></tr></thead>
@@ -175,6 +188,8 @@
   </div>
 </section>
 
+<div id="tvPop" class="tv-pop"></div>
+<div id="tvTip" class="tv-tip"></div>
 <div id="preview"><img alt="出品票"><div class="msg" hidden>出品票を読み込み中…</div></div>
 <dialog id="pdfDlg">
   <div class="hd"><b id="pdfTtl"></b><span style="flex:1"></span>
