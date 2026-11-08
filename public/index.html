@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>仕入れ台帳</title>
+<style>
+  :root {
+    --navy: #13234a; --navy-2: #22386b; --accent: #10b8c4; --orange: #f26b1d;
+    --bg: #edf1f5; --line: #c3ccd6; --stripe: #e2f4f6; --hover: #fff5c4;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #172033; font: 13px/1.4 "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; }
+  button, input, select { font: inherit; }
+  input, select { padding: 3px 6px; border: 1px solid #8792a6; border-radius: 3px; background: #fff; }
+
+  .top { background: var(--navy); color: #fff; padding: 8px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .top h1 { margin: 0 8px 0 0; font-size: 17px; letter-spacing: .05em; }
+  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--navy-2); padding: 6px 8px; border-radius: 4px; }
+  .filters span { font-size: 11px; color: #c9e6ee; }
+  .w-s { width: 80px; } .w-m { width: 130px; } .w-d { width: 132px; }
+  .btn { border: 0; border-radius: 4px; padding: 6px 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn-main { background: var(--orange); color: #fff; font-size: 15px; padding: 8px 22px; }
+  .btn-sub { background: #dfe3ec; color: #172033; }
+  .btn-ok { background: #1f9d45; color: #fff; }
+  .btn-ng { background: #c22; color: #fff; }
+  .drop { border: 2px dashed #7ab0dd; background: #0e1a33; color: #bcdcff; padding: 7px 12px; border-radius: 6px; cursor: pointer; }
+  .drop.over { background: #23406e; }
+  #log { font-size: 12px; color: #ffe9a8; max-width: 440px; }
+
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 12px; background: #fff; border-bottom: 3px solid var(--accent); }
+  .bar .ttl { font-size: 18px; font-weight: 700; }
+  .bar .grow { flex: 1; }
+  .bar .unit { font-size: 11px; color: #667; }
+
+  .scroll { overflow: auto; height: calc(100vh - 150px); min-height: 300px; background: #fff; }
+  table { border-collapse: collapse; width: max-content; min-width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 3px 6px; white-space: nowrap; }
+  thead th { position: sticky; top: 0; z-index: 2; background: #e3e8ef; font-size: 12px; cursor: pointer; user-select: none; }
+  thead th.on { background: #ffe08f; }
+  thead th.bidh { background: #ffd3de; }
+  th .grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 3; }
+  th .grip:hover, th .grip.drag { background: rgba(30, 120, 220, .35); }
+  body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+  tbody tr:nth-child(even) { background: var(--stripe); }
+  tbody tr:hover { background: var(--hover); cursor: pointer; }
+  td.money { text-align: right; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+  td.m-start { color: #555; } td.m-bid { color: #c00; background: #ffe9ef; } td.m-plan { color: #0646b0; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.sc { text-align: center; font-weight: 700; color: #0b2b87; }
+  td.clip { overflow: hidden; text-overflow: ellipsis; }
+  .tag-warn { background: #d33; color: #fff; border-radius: 3px; padding: 0 4px; font-size: 10px; margin-left: 3px; }
+  .none { color: #aaa; }
+  .pen { background: #fff; border: 1px solid #9aaabb; border-radius: 4px; padding: 1px 6px; cursor: pointer; }
+  .pen:hover { background: #ffe08f; }
+  .empty { padding: 40px; text-align: center; color: #778; }
+
+  dialog { border: 0; border-radius: 8px; padding: 0; width: min(780px, 96vw); }
+  dialog::backdrop { background: rgba(10, 20, 40, .45); }
+  #editForm { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 12px; }
+  #editForm label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #4a5568; }
+  #editForm label input, #editForm label textarea { width: 100%; font: inherit; padding: 3px 6px; border: 1px solid #8792a6; border-radius: 3px; }
+  #editForm .full { grid-column: 1 / -1; }
+  #editForm .key input { background: #fff4d8; font-weight: 700; }
+  #editForm .acts { grid-column: 1 / -1; display: flex; gap: 8px; }
+  #editForm .acts .grow { flex: 1; }
+  #pdfDlg { width: min(1100px, 96vw); height: 92vh; }
+  #pdfDlg .hd { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--navy); color: #fff; }
+  #pdfDlg .hd a { color: #9fd0ff; font-size: 12px; }
+  #pdfDlg iframe { width: 100%; height: calc(100% - 44px); border: 0; background: #555; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>仕入れ台帳</h1>
+  <div class="filters">
+    <span>担当者</span><input id="f_buyer" class="w-s" placeholder="名前">
+    <span>キーワード</span><input id="f_q" class="w-m" placeholder="車名・型式・グレード">
+    <span>会場</span><input id="f_auction_house" class="w-s" placeholder="USS東京 等">
+    <span>年式</span><select id="f_year_from"></select>〜<select id="f_year_to"></select>
+    <span>開催日</span><input type="date" id="f_date_from" class="w-d">〜<input type="date" id="f_date_to" class="w-d">
+  </div>
+  <button class="btn btn-main" id="btnSearch">検索</button>
+  <button class="btn btn-sub" id="btnClear">条件クリア</button>
+  <label class="drop" id="dropAi">📄 出品票PDFをドロップ / クリック（AIで読み取り・複数可）
+    <input type="file" id="inAi" accept="application/pdf" multiple hidden></label>
+  <label class="drop" id="dropImp">📥 データ取り込み（TSV/CSV＋PDF）
+    <input type="file" id="inImp" accept=".tsv,.csv,.txt,application/pdf" multiple hidden></label>
+  <div id="log"></div>
+</div>
+
+<div class="bar">
+  <span class="ttl" id="ttl">全車両</span>
+  <span id="cnt"></span>
+  <span class="grow"></span>
+  <span class="unit">金額単位：万円</span>
+  <a class="btn btn-ok" id="lnkCsv" href="/api/export.csv">CSV出力</a>
+  <a class="btn btn-sub" href="/api/backup.tsv" title="全データを取り込み用TSVで保存（移行・バックアップ用）">バックアップ</a>
+</div>
+
+<div class="scroll">
+  <style id="widthCss"></style>
+  <table id="grid"><thead><tr id="hdr"></tr></thead><tbody id="rows"></tbody></table>
+  <div class="empty" id="empty" hidden>データがありません。出品票PDFをドロップして登録してください。</div>
+</div>
+
+<dialog id="pdfDlg">
+  <div class="hd"><b id="pdfTtl"></b><span style="flex:1"></span>
+    <a id="pdfOpen" href="#" target="_blank">新しいタブで開く</a>
+    <button class="btn btn-sub" id="pdfClose">閉じる ✕</button></div>
+  <iframe id="pdfFrame" title="PDF"></iframe>
+</dialog>
+<dialog id="editDlg"><form method="dialog" id="editForm"></form></dialog>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const h = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const fmtMan = (v) => (v === null || v === undefined || v === "") ? "" : Number(v).toFixed(1);
+const FILTERS = ["buyer", "q", "auction_house", "year_from", "year_to", "date_from", "date_to"];
+
+// 表の列: [キー, 見出し, ソート可]
+const COLUMNS = [
+  ["buyer", "仕入れ担当", 1], ["auction_date", "開催日", 1], ["auction_house", "会場", 1],
+  ["year", "年式", 1], ["car_name", "車名", 1], ["model_code", "型式", 1], ["grade", "グレード", 1],
+  ["color", "色", 1], ["mileage_km", "走行(千km)", 1], ["start_price_man", "スタート", 1],
+  ["bid_price_man", "落札金額", 1], ["planned_price_man", "予定車両価格", 1], ["diff", "予定−落札×1.1", 0],
+  ["score", "評価", 1], ["extint", "外/内", 0], ["color_code", "カラーNo", 1], ["displacement_cc", "排気", 1],
+  ["shift", "ｼﾌﾄ", 1], ["inspection", "車検", 1], ["lot_no", "出品番号", 1], ["maker", "メーカー", 1],
+  ["handwritten_note", "手書きメモ", 1], ["edit", "編集", 0],
+];
+// 編集フォーム: [キー, ラベル, 強調, 全幅]
+const FORM = [
+  ["start_price_man", "スタート金額(万円)", 1], ["bid_price_man", "落札金額(万円)", 1], ["planned_price_man", "予定車両価格(万円)", 1],
+  ["buyer", "仕入れ担当者"], ["member_name", "会員名(印字)"], ["auction_date", "開催日(YYYY-MM-DD)"],
+  ["auction_house", "会場"], ["auction_round", "開催回"], ["lot_no", "出品番号"], ["result", "結果"],
+  ["maker", "メーカー"], ["car_name", "車名"], ["grade", "グレード"], ["model_code", "型式"], ["year", "年式(西暦)"],
+  ["first_reg_month", "初度登録月"], ["displacement_cc", "排気量(cc)"], ["fuel", "燃料"], ["shift", "シフト"],
+  ["mileage_km", "走行(km)"], ["inspection", "車検"], ["color", "色"], ["color_code", "カラーNo"],
+  ["score", "評価点"], ["score_exterior", "外装"], ["score_interior", "内装"], ["equipment", "装備", 0, 1],
+  ["handwritten_note", "手書きメモ", 0, 1], ["inspector_note", "検査員記入/注意事項", 0, 1], ["review_reason", "要確認の理由", 0, 1],
+];
+const NUMERIC = new Set(["start_price_man", "bid_price_man", "planned_price_man", "year", "first_reg_month", "displacement_cc", "mileage_km"]);
+const DEFAULT_ORDER = ["car_name", "grade", "color"]; // 未指定時はサーバー側でこの順に降順
+
+const state = { sort: "", dir: "desc", rows: [] };
+
+// ---------- 列幅（見出し右端ドラッグで変更 / ダブルクリックで戻す） ----------
+const BASE_W = { grade: 120, handwritten_note: 220 };
+let widths = {};
+try { widths = JSON.parse(localStorage.getItem("colWidths") || "{}"); } catch {}
+const saveW = () => { try { localStorage.setItem("colWidths", JSON.stringify(widths)); } catch {} };
+function applyWidths() {
+  $("widthCss").textContent = COLUMNS.map(([k], i) => {
+    const w = widths[k] ?? BASE_W[k];
+    return w ? `#grid th:nth-child(${i + 1}),#grid td:nth-child(${i + 1}){width:${w}px;min-width:${w}px;max-width:${w}px;overflow:hidden;text-overflow:ellipsis}` : "";
+  }).join("");
+}
+let suppressClick = false;
+function beginResize(ev, th) {
+  ev.preventDefault(); ev.stopPropagation();
+  const key = th.dataset.k, startX = ev.clientX, startW = th.getBoundingClientRect().width;
+  ev.target.classList.add("drag"); document.body.classList.add("resizing");
+  const onMove = (e) => { widths[key] = Math.max(30, Math.round(startW + e.clientX - startX)); applyWidths(); };
+  const onUp = () => {
+    removeEventListener("pointermove", onMove); removeEventListener("pointerup", onUp);
+    ev.target.classList.remove("drag"); document.body.classList.remove("resizing");
+    saveW(); suppressClick = true; setTimeout(() => (suppressClick = false));
+  };
+  addEventListener("pointermove", onMove); addEventListener("pointerup", onUp);
+}
+
+// ---------- 見出し ----------
+function drawHeader() {
+  $("hdr").innerHTML = COLUMNS.map(([k, label]) => {
+    let mark = "", on = false;
+    if (state.sort === k) { mark = state.dir === "asc" ? " ▲" : " ▼"; on = true; }
+    else if (!state.sort && DEFAULT_ORDER.includes(k)) { mark = ` ▼${DEFAULT_ORDER.indexOf(k) + 1}`; on = true; }
+    const cls = [on ? "on" : "", k === "bid_price_man" && !on ? "bidh" : ""].join(" ");
+    return `<th data-k="${k}" class="${cls}" style="position:sticky">${label}${mark}<span class="grip" title="ドラッグで幅変更 / ダブルクリックで元に戻す"></span></th>`;
+  }).join("");
+  for (const th of $("hdr").children) {
+    const grip = th.querySelector(".grip");
+    grip.onpointerdown = (e) => beginResize(e, th);
+    grip.onclick = (e) => e.stopPropagation();
+    grip.ondblclick = (e) => { e.stopPropagation(); delete widths[th.dataset.k]; saveW(); applyWidths(); };
+    th.onclick = () => {
+      if (suppressClick) return;
+      const col = COLUMNS.find((c) => c[0] === th.dataset.k);
+      if (!col[2]) return;
+      if (state.sort === col[0]) state.dir = state.dir === "asc" ? "desc" : "asc";
+      else { state.sort = col[0]; state.dir = "desc"; }
+      load();
+    };
+  }
+  applyWidths();
+}
+
+// ---------- セル ----------
+function td(r, k, i) {
+  const v = r[k];
+  switch (k) {
+    case "buyer": return `<td><b>${h(v) || '<span class="none">未設定</span>'}</b></td>`;
+    case "start_price_man": return `<td class="money m-start">${fmtMan(v)}</td>`;
+    case "bid_price_man": return `<td class="money m-bid">${fmtMan(v)}</td>`;
+    case "planned_price_man": return `<td class="money m-plan">${fmtMan(v)}</td>`;
+    case "diff": {
+      if (r.planned_price_man == null || r.bid_price_man == null) return "<td></td>";
+      const d = r.planned_price_man - r.bid_price_man * 1.1;
+      return `<td class="money" style="color:${d < 0 ? "#c00" : "#080"}">${d > 0 ? "+" : ""}${d.toFixed(1)}</td>`;
+    }
+    case "mileage_km": return `<td class="n" title="${v == null ? "" : Number(v).toLocaleString() + " km"}">${v == null ? "" : (v / 1000).toFixed(1)}</td>`;
+    case "score": return `<td class="sc">${h(v)}</td>`;
+    case "extint": return `<td>${r.score_exterior || r.score_interior ? `${h(r.score_exterior)}/${h(r.score_interior)}` : ""}</td>`;
+    case "car_name": return `<td>${h(v)}${r.needs_review ? `<span class="tag-warn" title="${h(r.review_reason)}">要確認</span>` : ""}</td>`;
+    case "grade": case "handwritten_note": return `<td class="clip" title="${h(v)}">${h(v)}</td>`;
+    case "edit": return `<td style="text-align:center"><button class="pen" data-edit="${i}" title="編集">✏️</button></td>`;
+    default: return `<td>${h(v)}</td>`;
+  }
+}
+
+// ---------- 読み込み ----------
+function filterParams() {
+  const p = new URLSearchParams();
+  for (const k of FILTERS) { const v = $("f_" + k).value.trim(); if (v) p.set(k, v); }
+  return p;
+}
+async function load() {
+  drawHeader();
+  const p = filterParams();
+  $("lnkCsv").href = "/api/export.csv?" + p;
+  if (state.sort) { p.set("sort", state.sort); p.set("dir", state.dir); }
+  p.set("limit", "1000");
+  let data;
+  try {
+    const res = await fetch("/api/vehicles?" + p);
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+  } catch (e) { $("log").textContent = "❌ 読み込み失敗: " + e.message; return; }
+  state.rows = data.rows || [];
+  $("cnt").textContent = `${data.total} 件` + (data.total > state.rows.length ? `（先頭 ${state.rows.length} 件を表示）` : "");
+  $("ttl").textContent = [$("f_buyer").value.trim(), $("f_q").value.trim()].filter(Boolean).join(" / ") || "全車両";
+  $("rows").innerHTML = state.rows.map((r, i) => `<tr data-i="${i}">${COLUMNS.map(([k]) => td(r, k, i)).join("")}</tr>`).join("");
+  $("empty").hidden = state.rows.length > 0;
+}
+$("rows").addEventListener("click", (e) => {
+  const pen = e.target.closest("[data-edit]");
+  if (pen) return openEdit(state.rows[pen.dataset.edit]);
+  const tr = e.target.closest("tr");
+  if (!tr) return;
+  const r = state.rows[tr.dataset.i];
+  r.pdf_key ? openPdf(r) : openEdit(r);
+});
+
+// ---------- 編集 ----------
+function openEdit(r) {
+  const f = $("editForm");
+  f.innerHTML =
+    `<div class="full" style="font-size:15px;font-weight:700">${h(r.car_name)} ${h(r.grade)}
+       <span style="color:#889;font-size:12px;font-weight:400">${h(r.auction_house)} ${h(r.lot_no)}</span>
+       ${r.pdf_key ? `<a href="#" id="editPdf" style="float:right;font-size:12px">PDFを開く (p.${r.page_no || 1})</a>` : ""}</div>` +
+    FORM.map(([k, label, key, full]) => {
+      const v = k.endsWith("_price_man") ? fmtMan(r[k]) : (r[k] ?? "");
+      return `<label class="${key ? "key" : ""} ${full ? "full" : ""}">${label}<input name="${k}" value="${h(v)}"${NUMERIC.has(k) ? ' inputmode="decimal"' : ""}></label>`;
+    }).join("") +
+    `<label><span><input type="checkbox" name="needs_review" ${r.needs_review ? "checked" : ""}> 要確認</span></label>
+     <div class="acts"><button type="button" class="btn btn-ng" id="btnDel">削除</button><span class="grow"></span>
+       <button value="cancel" class="btn btn-sub">閉じる</button><button type="button" class="btn btn-ok" id="btnSave">保存</button></div>`;
+  if (r.pdf_key) $("editPdf").onclick = (e) => { e.preventDefault(); openPdf(r); };
+  $("btnSave").onclick = async () => {
+    const body = { needs_review: f.elements.needs_review.checked };
+    for (const [k] of FORM) {
+      const v = f.elements[k].value.trim();
+      body[k] = v === "" ? null : NUMERIC.has(k) ? Number(v.replace(/[,，]/g, "")) : v;
+    }
+    const res = await fetch(`/api/vehicles/${r.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) return alert("保存に失敗しました");
+    $("editDlg").close(); load();
+  };
+  $("btnDel").onclick = async () => {
+    if (!confirm("この車両を削除しますか？")) return;
+    await fetch(`/api/vehicles/${r.id}`, { method: "DELETE" });
+    $("editDlg").close(); load();
+  };
+  $("editDlg").showModal();
+}
+
+// ---------- PDF表示 ----------
+function openPdf(r) {
+  const url = `/api/pdf/${encodeURIComponent(r.pdf_key)}#page=${r.page_no || 1}&view=FitH`;
+  $("pdfTtl").textContent = `${r.car_name || ""} ${r.grade || ""}（p.${r.page_no || 1}）`;
+  $("pdfFrame").src = url;
+  $("pdfOpen").href = url;
+  $("pdfDlg").showModal();
+}
+$("pdfClose").onclick = () => $("pdfDlg").close();
+$("pdfDlg").addEventListener("close", () => ($("pdfFrame").src = "about:blank"));
+$("pdfDlg").addEventListener("click", (e) => { if (e.target === $("pdfDlg")) $("pdfDlg").close(); });
+
+// ---------- アップロード（AI読み取り） ----------
+const log = (s) => ($("log").textContent = s);
+async function aiUpload(files) {
+  const pdfs = [...files].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  for (let i = 0; i < pdfs.length; i++) {
+    const f = pdfs[i];
+    log(`読み取り中 (${i + 1}/${pdfs.length}) ${f.name} … 数十秒〜数分かかります`);
+    const fd = new FormData(); fd.append("file", f);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || res.status);
+      log(`✅ ${f.name}: ${j.count}台を登録`);
+    } catch (e) {
+      log(`❌ ${f.name}: ${e.message}`);
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+    load();
+  }
+}
+
+// ---------- 取り込み（TSV/CSV＋PDF） ----------
+async function importFiles(files) {
+  const list = [...files];
+  const tables = list.filter((f) => /\.(tsv|csv|txt)$/i.test(f.name));
+  const pdfs = list.filter((f) => /\.pdf$/i.test(f.name));
+  try {
+    for (const f of tables) {
+      log(`取り込み中… ${f.name}`);
+      const res = await fetch("/api/import", { method: "POST", body: await f.text() });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || res.status);
+      log(`✅ ${f.name}: ${j.count}台を取り込み`);
+    }
+    for (let i = 0; i < pdfs.length; i++) {
+      log(`PDF保存中 (${i + 1}/${pdfs.length}) ${pdfs[i].name}`);
+      const fd = new FormData(); fd.append("file", pdfs[i]);
+      const res = await fetch("/api/import-pdf", { method: "POST", body: fd });
+      if (!res.ok) throw new Error((await res.json()).error || res.status);
+    }
+    log("✅ 取り込み完了" + (pdfs.length ? `（PDF ${pdfs.length}件）` : ""));
+  } catch (e) { log("❌ 取り込み失敗: " + e.message); }
+  load();
+}
+
+function dropZone(zone, input, handler) {
+  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("over"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+  zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("over"); handler(e.dataTransfer.files); });
+  input.addEventListener("change", async () => { await handler(input.files); input.value = ""; });
+}
+dropZone($("dropAi"), $("inAi"), aiUpload);
+dropZone($("dropImp"), $("inImp"), importFiles);
+// 枠の外に落としてもブラウザがファイルを開かないように
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => e.preventDefault());
+
+// ---------- 検索条件 ----------
+const wareki = (y) => y >= 2019 ? "R" + String(y - 2018).padStart(2, "0") : y >= 1989 ? "H" + String(y - 1988).padStart(2, "0") : "";
+(() => {
+  let opts = '<option value="">指定なし</option>';
+  for (let y = new Date().getFullYear() + 1; y >= 2000; y--) opts += `<option value="${y}">${y}年 (${wareki(y)})</option>`;
+  $("f_year_from").innerHTML = $("f_year_to").innerHTML = opts;
+})();
+$("f_year_from").onchange = $("f_year_to").onchange = load;
+$("btnSearch").onclick = load;
+$("btnClear").onclick = () => { for (const k of FILTERS) $("f_" + k).value = ""; state.sort = ""; state.dir = "desc"; load(); };
+document.querySelectorAll(".filters input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); }));
+
+load();
+</script>
+</body>
+</html>
