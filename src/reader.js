@@ -5,8 +5,8 @@ import { extractPageJpeg } from "./pdf.js";
 // ---- 読み取り結果の形 ----------------------------------------------------------
 const nullable = (type, description) => ({ type: [type, "null"], ...(description ? { description } : {}) });
 const VEHICLE_PROPS = {
-  sheet_format: nullable("string"),
-  control_no: nullable("string"),
+  sheet_format: nullable("string", "用紙の種類 例: USS, 車両詳細, TC-web, H@Live"),
+  control_no: nullable("string", "赤ペン等で手書きされた管理番号 例: Z26-1103-01"),
   auction_house: nullable("string", "会場名 例: USS東京, TAA横浜, CAA中部"),
   auction_date: nullable("string", "開催日 YYYY-MM-DD"),
   auction_round: nullable("string", "開催回"),
@@ -30,8 +30,9 @@ const VEHICLE_PROPS = {
   score_interior: nullable("string"),
   equipment: nullable("string", "装備をスペース区切りで 例: AC PS PW SR AW"),
   start_price_man: nullable("number", "スタート金額（万円）"),
-  bid_price_man: nullable("number", "落札金額（万円）"),
-  result: nullable("string", "落札/流札/商談 など"),
+  bid_price_man: nullable("number", "落札金額・成約金額（万円）"),
+  planned_price_man: nullable("number", "手書きされた予定車両価格（万円）例: 手書きの「179」→179"),
+  result: nullable("string", "印字されている結果 例: 落札, 成約, 商談落札"),
   member_name: nullable("string", "印字されている会員名"),
   handwritten_note: nullable("string", "手書きの書き込みをすべて文字起こし"),
   inspector_note: nullable("string", "検査員記入欄・注意事項"),
@@ -56,7 +57,11 @@ const PROMPT = `これは日本の中古車オークションの出品票（オ�
 - 1ページに複数台載っている場合は、すべて別の車両として出力します。車両が無いページは vehicles を空配列にします。
 - 金額はすべて「万円」単位の数値にします（例: 125,000円 → 12.5、1250千円 → 125）。
 - 年式は西暦の整数に換算します（R05/令和5年 → 2023、H30 → 2018）。
-- 手書きの書き込み（金額・メモ・印など）は handwritten_note にできるだけそのまま書き起こします。
+- 用紙の余白には社内の手書きがあります。
+  - 「Z26-1103-01」のような管理番号（たいてい赤字）→ control_no
+  - 単独で大きく書かれた2〜3桁の数字（例: 179）は予定車両価格（万円）→ planned_price_man
+  - それ以外の手書き（名前・メモ・丸印など）は handwritten_note に「手書き「〇〇」」の形でそのまま書き起こします。
+- 落札金額は「成約」「落札」などの欄に印字された金額です。スタート金額と取り違えないでください。
 - 読めない・存在しない項目は null にします。推測で埋めないでください。
 - 読み取りに自信がない項目がある車両は needs_review を true にし、review_reason に理由を書きます。`;
 

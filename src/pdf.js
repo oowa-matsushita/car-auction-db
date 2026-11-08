@@ -32,12 +32,36 @@ export async function extractPageJpeg(pageBytes) {
         continue;
       }
       if (subtype !== PDFName.of("Image")) continue;
-      const filter = obj.dict.lookup(PDFName.of("Filter"));
-      const isJpeg = filter === PDFName.of("DCTDecode") ||
-        (filter && typeof filter.asArray === "function" && filter.asArray().length === 1 && filter.asArray()[0] === PDFName.of("DCTDecode"));
-      if (isJpeg && (!best || obj.contents.length > best.length)) best = obj.contents;
+      // フィルターが DCTDecode（JPEG）で終わるものだけ対象。前段の FlateDecode（zlib 圧縮）は後で展開する
+      const f = obj.dict.lookup(PDFName.of("Filter"));
+      const filters = !f ? [] : typeof f.asArray === "function" ? f.asArray() : [f];
+      if (!filters.length || filters[filters.length - 1] !== PDFName.of("DCTDecode")) continue;
+      if (!filters.slice(0, -1).every((x) => x === PDFName.of("FlateDecode"))) continue;
+      if (!best || obj.contents.length > best.obj.contents.length) best = { obj, inflate: filters.length - 1 };
     }
   };
   visit(page.node.Resources(), 0);
-  return best;
+  if (!best) return null;
+  let bytes = best.obj.contents;
+  for (let i = 0; i < best.inflate; i++) bytes = await inflate(bytes);
+  return bytes;
+}
+
+// zlib を展開する。末尾が欠けているデータ（スキャナーによくある）でも、読めた分は返す
+async function inflate(bytes) {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+  const chunks = [];
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+  } catch (e) {
+    if (!chunks.length) throw e;
+  }
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
 }

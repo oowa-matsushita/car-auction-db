@@ -55,6 +55,11 @@ function normalize(field, v) {
     if (v === "") return null;
   }
   if (field === "needs_review") return ["1", "true", "TRUE", "要確認", "○", "yes"].includes(String(v)) || v === 1 ? 1 : 0;
+  if (field === "year") {
+    // 和暦（R07, H30, 令和7 など）も西暦に直す
+    const m = String(v).match(/^(R|H|令和|平成)\s*0*(\d{1,2})/i);
+    if (m) return Number(m[2]) + (/^(R|令和)/i.test(m[1]) ? 2018 : 1988);
+  }
   if (INT_FIELDS.has(field) || REAL_FIELDS.has(field)) {
     const n = Number(String(v).replace(/[,，\s]/g, ""));
     if (!Number.isFinite(n)) return null;
