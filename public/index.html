@@ -215,7 +215,6 @@ function td(r, k, i) {
     case "year": return `<td title="${v ?? ""}">${v ? wareki(v) || v : ""}</td>`;
     case "score": return `<td class="sc">${h(v)}</td>`;
     case "extint": return `<td>${r.score_exterior || r.score_interior ? `${h(r.score_exterior)}/${h(r.score_interior)}` : ""}</td>`;
-    case "car_name": return `<td>${h(v)}${r.needs_review ? `<span class="tag-warn" title="${h(r.review_reason)}">要確認</span>` : ""}</td>`;
     case "grade": case "handwritten_note": return `<td class="clip" title="${h(v)}">${h(v)}</td>`;
     case "edit": return `<td style="text-align:center"><button class="pen" data-edit="${i}" title="編集">✏️</button></td>`;
     default: return `<td>${h(v)}</td>`;
