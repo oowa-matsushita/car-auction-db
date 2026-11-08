@@ -281,7 +281,7 @@ function openEdit(r) {
       body[k] = v === "" ? null : NUMERIC.has(k) ? Number(v.replace(/[,，]/g, "")) : v;
     }
     const res = await fetch(`/api/vehicles/${r.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) return alert("保存に失敗しました");
+    if (!res.ok) return alert((await res.json().catch(() => ({}))).error || "保存に失敗しました");
     $("editDlg").close(); load();
   };
   $("btnDel").onclick = async () => {
@@ -330,7 +330,7 @@ async function aiUpload(files) {
 }
 
 // 読み取りの進み具合を表示（読み取り中は5秒ごとに確認し、表も更新）
-let watching = null, lastDone = -1;
+let watching = null, lastDone = -1, lastSkipped = -1;
 async function watchProgress() {
   clearTimeout(watching);
   let data;
@@ -357,6 +357,9 @@ async function watchProgress() {
     }
   } else box.hidden = true;
   if (done !== lastDone) { if (lastDone >= 0) load(); lastDone = done; }
+  const skipped = sum("skipped");
+  if (lastSkipped >= 0 && skipped > lastSkipped) log(`ℹ️ 車台番号がすでに登録済みの車 ${skipped - lastSkipped}台は登録しませんでした`);
+  lastSkipped = skipped;
   if (pending) watching = setTimeout(watchProgress, 5000);
 }
 
@@ -371,7 +374,7 @@ async function importFiles(files) {
       const res = await fetch("/api/import", { method: "POST", body: await f.text() });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.status);
-      log(`✅ ${f.name}: ${j.count}台を取り込み`);
+      log(`✅ ${f.name}: ${j.count}台を取り込み` + (j.skipped ? `（車台番号が登録済みの ${j.skipped}台は入れませんでした）` : ""));
     }
     for (let i = 0; i < pdfs.length; i++) {
       log(`PDF保存中 (${i + 1}/${pdfs.length}) ${pdfs[i].name}`);

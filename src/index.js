@@ -95,11 +95,26 @@ function orderBy(url) {
   return "ORDER BY car_name DESC, grade DESC, color DESC, id DESC";
 }
 
+// 車台番号の比べ方：大文字・小文字、ハイフン、空白の違いは同じとみなす
+const normChassis = (v) => (v == null ? "" : String(v).toUpperCase().replace(/[-－ー‐\s　]/g, ""));
+const CHASSIS_SQL = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(${col}),'-',''),'－',''),'ー',''),' ',''),'　','')`;
+// 伏せ字（*）を含む番号は別の車と区別できないので、重複チェックに使わない
+const usableChassis = (n) => n.length >= 5 && !/[*＊]/.test(n);
+
+// 車両を登録する文。車台番号がすでに登録されている車は登録しない（meta.changes が 0 になる）
 async function insertVehicle(db, v) {
   const cols = FIELDS.filter((f) => v[f] !== undefined);
-  const stmt = `INSERT INTO vehicles (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`;
-  return db.prepare(stmt).bind(...cols.map((c) => normalize(c, v[c])));
+  const vals = cols.map((c) => normalize(c, v[c]));
+  const n = normChassis(v.chassis_no);
+  if (!usableChassis(n)) {
+    return db.prepare(`INSERT INTO vehicles (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`).bind(...vals);
+  }
+  return db.prepare(
+    `INSERT INTO vehicles (${cols.join(",")}) SELECT ${cols.map(() => "?").join(",")}
+     WHERE NOT EXISTS (SELECT 1 FROM vehicles WHERE ${CHASSIS_SQL("chassis_no")} = ?)`
+  ).bind(...vals, n);
 }
+const insertedCount = (results) => results.reduce((a, r) => a + (r?.meta?.changes || 0), 0);
 
 // 区切り文字（タブ/カンマ）を自動判定する簡易パーサ（ダブルクォート対応）
 function parseDelimited(text) {
@@ -148,6 +163,7 @@ const SCHEMA = [
 const ADDED_COLUMNS = [
   "ALTER TABLE uploads ADD COLUMN pages_total INTEGER",
   "ALTER TABLE vehicles ADD COLUMN chassis_no TEXT",
+  "ALTER TABLE upload_pages ADD COLUMN skipped INTEGER",
 ];
 let schemaReady = null;
 function ensureSchema(db) {
@@ -220,8 +236,9 @@ async function processPage(env, msg) {
     // 読み直しの場合に二重登録しないよう、そのページの分を入れ替える
     const stmts = [env.DB.prepare("DELETE FROM vehicles WHERE upload_id = ? AND page_no = ?").bind(upload_id, page_no)];
     for (const v of vehicles) stmts.push(await insertVehicle(env.DB, { ...v, upload_id, page_no, pdf_key: up.pdf_key }));
-    await env.DB.batch(stmts);
-    await setPage({ status: "done", reader, vehicle_count: vehicles.length, error: null });
+    const res = await env.DB.batch(stmts);
+    const added = insertedCount(res.slice(1));
+    await setPage({ status: "done", reader, vehicle_count: added, skipped: vehicles.length - added, error: null });
     await env.PDFS.delete(pageKey(upload_id, page_no));
     msg.ack();
   } catch (e) {
@@ -274,6 +291,14 @@ export default {
         const body = await request.json();
         const cols = EDITABLE.filter((f) => f in body);
         if (!cols.length) return json({ error: "更新する項目がありません" }, 400);
+        if ("chassis_no" in body) {
+          const n = normChassis(body.chassis_no);
+          if (usableChassis(n)) {
+            const dup = await env.DB.prepare(`SELECT id, car_name, auction_date FROM vehicles WHERE ${CHASSIS_SQL("chassis_no")} = ? AND id <> ?`)
+              .bind(n, Number(m[1])).first();
+            if (dup) return json({ error: `この車台番号はすでに登録されています（${dup.auction_date || ""} ${dup.car_name || ""}）` }, 409);
+          }
+        }
         await env.DB.prepare(
           `UPDATE vehicles SET ${cols.map((c) => `${c} = ?`).join(", ")}, updated_at = datetime('now','localtime') WHERE id = ?`
         ).bind(...cols.map((c) => normalize(c, body[c])), Number(m[1])).run();
@@ -312,6 +337,7 @@ export default {
             SUM(p.status = 'done') AS done,
             SUM(p.status = 'error') AS failed,
             SUM(COALESCE(p.vehicle_count, 0)) AS vehicles,
+            SUM(COALESCE(p.skipped, 0)) AS skipped,
             SUM(p.reader = 'claude') AS by_claude,
             SUM(p.reader = 'workers-ai') AS by_workers_ai,
             MAX(p.updated_at) AS updated_at,
@@ -356,8 +382,9 @@ export default {
           if (v.review_reason && v.needs_review === undefined) v.needs_review = 1;
           stmts.push(await insertVehicle(env.DB, v));
         }
-        for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
-        return json({ ok: true, count: stmts.length });
+        let added = 0;
+        for (let i = 0; i < stmts.length; i += 100) added += insertedCount(await env.DB.batch(stmts.slice(i, i + 100)));
+        return json({ ok: true, count: added, skipped: stmts.length - added });
       }
 
       // 取り込み用PDF保存（ファイル名をそのままキーにする：TSVの file 列と対応）
