@@ -3,41 +3,43 @@ import { Buffer } from "node:buffer";
 import { extractPageJpeg } from "./pdf.js";
 
 // ---- 読み取り結果の形 ----------------------------------------------------------
-const nullable = (type, description) => ({ type: [type, "null"], ...(description ? { description } : {}) });
+// API の制限（「空でもよい」型は16項目まで）に引っかからないよう、すべて文字列で受け取る。
+// 読めない項目は空文字 ""。数値は保存するときに数値へ直す（index.js の normalize）。
+const field = (_type, description) => ({ type: "string", ...(description ? { description } : {}) });
 const VEHICLE_PROPS = {
-  sheet_format: nullable("string", "用紙の種類 例: USS, 車両詳細, TC-web, H@Live"),
-  control_no: nullable("string", "赤ペン等で手書きされた管理番号 例: Z26-1103-01"),
-  auction_house: nullable("string", "会場名 例: USS東京, TAA横浜, CAA中部"),
-  auction_date: nullable("string", "開催日 YYYY-MM-DD"),
-  auction_round: nullable("string", "開催回"),
-  lot_no: nullable("string", "出品番号"),
-  maker: nullable("string"),
-  car_name: nullable("string"),
-  grade: nullable("string"),
-  model_code: nullable("string", "型式 例: DBA-ZRR80W"),
-  chassis_no: nullable("string", "車台番号 例: ZVW50-1234567。一部が伏せ字（*）なら見えている通りに書く"),
-  year: nullable("integer", "年式（西暦）。R5→2023, H30→2018"),
-  first_reg_month: nullable("integer", "初度登録の月 1-12"),
-  displacement_cc: nullable("integer"),
-  fuel: nullable("string"),
-  shift: nullable("string", "FA, CA, AT, MT, F5 など表記のまま"),
-  mileage_km: nullable("integer", "走行距離をkmで。'45千km'なら45000"),
-  inspection: nullable("string", "車検 例: R07.05"),
-  color: nullable("string"),
-  color_code: nullable("string"),
-  score: nullable("string", "評価点 例: 4.5, R, RA"),
-  score_exterior: nullable("string"),
-  score_interior: nullable("string"),
-  equipment: nullable("string", "装備をスペース区切りで 例: AC PS PW SR AW"),
-  start_price_man: nullable("number", "スタート金額（万円）"),
-  bid_price_man: nullable("number", "落札金額・成約金額（万円）"),
-  planned_price_man: nullable("number", "手書きされた予定車両価格（万円）例: 手書きの「179」→179"),
-  result: nullable("string", "印字されている結果 例: 落札, 成約, 商談落札"),
-  member_name: nullable("string", "印字されている会員名"),
-  handwritten_note: nullable("string", "手書きの書き込みをすべて文字起こし"),
-  inspector_note: nullable("string", "検査員記入欄・注意事項"),
+  sheet_format: field("string", "用紙の種類 例: USS, 車両詳細, TC-web, H@Live"),
+  control_no: field("string", "赤ペン等で手書きされた管理番号 例: Z26-1103-01"),
+  auction_house: field("string", "会場名 例: USS東京, TAA横浜, CAA中部"),
+  auction_date: field("string", "開催日 YYYY-MM-DD"),
+  auction_round: field("string", "開催回"),
+  lot_no: field("string", "出品番号"),
+  maker: field("string"),
+  car_name: field("string"),
+  grade: field("string"),
+  model_code: field("string", "型式 例: DBA-ZRR80W"),
+  chassis_no: field("string", "車台番号 例: ZVW50-1234567。一部が伏せ字（*）なら見えている通りに書く"),
+  year: field("integer", "年式を西暦4桁で。R5→2023, H30→2018"),
+  first_reg_month: field("integer", "初度登録の月 1-12"),
+  displacement_cc: field("integer"),
+  fuel: field("string"),
+  shift: field("string", "FA, CA, AT, MT, F5 など表記のまま"),
+  mileage_km: field("integer", "走行距離をkmで。'45千km'なら45000"),
+  inspection: field("string", "車検 例: R07.05"),
+  color: field("string"),
+  color_code: field("string"),
+  score: field("string", "評価点 例: 4.5, R, RA"),
+  score_exterior: field("string"),
+  score_interior: field("string"),
+  equipment: field("string", "装備をスペース区切りで 例: AC PS PW SR AW"),
+  start_price_man: field("number", "スタート金額（万円）"),
+  bid_price_man: field("number", "落札金額・成約金額（万円）"),
+  planned_price_man: field("number", "手書きされた予定車両価格（万円）例: 手書きの「179」→179"),
+  result: field("string", "印字されている結果 例: 落札, 成約, 商談落札"),
+  member_name: field("string", "印字されている会員名"),
+  handwritten_note: field("string", "手書きの書き込みをすべて文字起こし"),
+  inspector_note: field("string", "検査員記入欄・注意事項"),
   needs_review: { type: "boolean", description: "読み取りに自信がない項目があれば true" },
-  review_reason: nullable("string"),
+  review_reason: field("string"),
 };
 export const VEHICLE_SCHEMA = {
   type: "object",
@@ -62,7 +64,8 @@ const PROMPT = `これは日本の中古車オークションの出品票（オ�
   - 単独で大きく書かれた2〜3桁の数字（例: 179）は予定車両価格（万円）→ planned_price_man
   - それ以外の手書き（名前・メモ・丸印など）は handwritten_note に「手書き「〇〇」」の形でそのまま書き起こします。
 - 落札金額は「成約」「落札」などの欄に印字された金額です。スタート金額と取り違えないでください。
-- 読めない・存在しない項目は null にします。推測で埋めないでください。
+- 読めない・存在しない項目は空文字 "" にします。推測で埋めないでください。
+- 数値の項目（金額・年式・走行距離・排気量・月）は、数字だけを書きます（例: "157.1"、"5002"）。単位やカンマは付けません。
 - 読み取りに自信がない項目がある車両は needs_review を true にし、review_reason に理由を書きます。`;
 
 // ---- Claude ---------------------------------------------------------------
@@ -113,7 +116,7 @@ async function readWithWorkersAI(env, pageBytes) {
     {
       role: "user",
       content: [
-        { type: "text", text: PROMPT + "\n\n出力形式: " + JSON.stringify({ vehicles: [Object.fromEntries(Object.keys(VEHICLE_PROPS).map((k) => [k, null]))] }) },
+        { type: "text", text: PROMPT + "\n\n出力形式: " + JSON.stringify({ vehicles: [Object.fromEntries(Object.keys(VEHICLE_PROPS).map((k) => [k, k === "needs_review" ? false : ""]))] }) },
         { type: "image_url", image_url: { url: "data:image/jpeg;base64," + Buffer.from(jpeg).toString("base64") } },
       ],
     },
@@ -132,7 +135,7 @@ async function readWithWorkersAI(env, pageBytes) {
 // ---- 切り替え ---------------------------------------------------------------
 // READER = "claude"（既定） / "workers-ai" / "hybrid"（Workers AI で読み、怪しければ Claude で読み直す）
 const looksDoubtful = (vs) =>
-  vs.length === 0 || vs.some((v) => v.needs_review || !v.car_name || (v.start_price_man == null && v.bid_price_man == null));
+  vs.length === 0 || vs.some((v) => v.needs_review || !v.car_name || (!v.start_price_man && !v.bid_price_man));
 
 export async function readPage(env, pageBytes) {
   const mode = (env.READER || "claude").toLowerCase();

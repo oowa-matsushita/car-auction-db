@@ -338,9 +338,17 @@ async function watchProgress() {
     box.hidden = false;
     box.innerHTML =
       (pending ? `⏳ 読み取り中 ${active.reduce((a, u) => a + u.done + u.failed, 0)}/${active.reduce((a, u) => a + u.pages_total, 0)}ページ` : "") +
-      (failed ? ` ⚠️ 失敗 ${failed}ページ <button class="btn btn-sub" id="btnRetry" style="padding:2px 8px">失敗分を読み直す</button>
-        <div style="margin-top:4px;padding:4px 6px;background:#fff;color:#a00;border-radius:3px;max-width:640px;white-space:pre-wrap;user-select:text">失敗の理由：\n${h(ups.filter((u) => u.errors).map((u) => `【${u.filename}】 ${u.errors}`).join("\n"))}</div>` : "");
-    if (failed) $("btnRetry").onclick = async () => { await fetch("/api/uploads/retry", { method: "POST" }); watchProgress(); };
+      (failed ? ` ⚠️ 失敗 ${failed}ページ
+        <button class="btn btn-sub" id="btnRetry" style="padding:2px 8px">失敗分を読み直す</button>
+        <button class="btn btn-sub" id="btnDiscard" style="padding:2px 8px">失敗分を取り消す</button>
+        <div style="margin-top:4px;padding:4px 6px;background:#fff;color:#a00;border-radius:3px;max-width:640px;white-space:pre-wrap;user-select:text">失敗の理由：\n${h(ups.filter((u) => u.failed).map((u) => `【${u.filename}】${u.failed}ページ：${u.errors}`).join("\n"))}</div>` : "");
+    if (failed) {
+      $("btnRetry").onclick = async () => { await fetch("/api/uploads/retry", { method: "POST" }); watchProgress(); };
+      $("btnDiscard").onclick = async () => {
+        if (!confirm(`失敗した ${failed}ページを取り消します。PDFを入れ直す前に使ってください。よろしいですか？`)) return;
+        await fetch("/api/uploads/discard", { method: "POST" }); watchProgress();
+      };
+    }
   } else box.hidden = true;
   if (done !== lastDone) { if (lastDone >= 0) load(); lastDone = done; }
   if (pending) watching = setTimeout(watchProgress, 5000);

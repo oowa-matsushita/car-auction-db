@@ -184,6 +184,25 @@ async function enqueue(env, jobs) {
   }
 }
 
+// エラーを日本語の説明に直す（英語のまま画面に出さない）
+function japaneseError(e) {
+  const msg = String(e?.message || e || "");
+  const status = e?.status;
+  if (/[ぁ-んァ-ン一-龥]/.test(msg) && !status) return msg; // もともと日本語のもの
+  if (status === 401 || /authentication|x-api-key/i.test(msg)) return "APIキーが正しくありません。Cloudflare に登録したキーを確認してください";
+  if (/credit balance|billing|payment/i.test(msg)) return "Anthropic の残高が足りません。console.anthropic.com の「Billing」で入金してください";
+  if (status === 403) return "このAPIキーでは使えない機能です（権限がありません）";
+  if (status === 404 || /model/i.test(msg) && /not.?found/i.test(msg)) return "指定したAIモデルが見つかりません（CLAUDE_MODEL の設定を確認してください）";
+  if (status === 413 || /too large|too long/i.test(msg)) return "PDFのページが大きすぎて読み取れません";
+  if (status === 429 || /rate.?limit/i.test(msg)) return "AIへの依頼が混み合っています。少し待ってから「失敗分を読み直す」を押してください";
+  if (status === 529 || /overloaded/i.test(msg)) return "AIが混雑しています。少し待ってから「失敗分を読み直す」を押してください";
+  if (status >= 500) return "AI側で一時的なエラーが起きました。「失敗分を読み直す」を押してください";
+  if (/JSON/i.test(msg)) return "AIの返事を読み取れませんでした。「失敗分を読み直す」を押してください";
+  if (status === 400) return "AIへの依頼の形に問題がありました（プログラムの不具合です。開発者に連絡してください）";
+  if (/fetch|network|timeout|timed out/i.test(msg)) return "通信エラーが起きました。「失敗分を読み直す」を押してください";
+  return "読み取り中に予期しないエラーが起きました。「失敗分を読み直す」を押してください";
+}
+
 const MAX_ATTEMPTS = 3;
 async function processPage(env, msg) {
   const { upload_id, page_no } = msg.body;
@@ -207,11 +226,13 @@ async function processPage(env, msg) {
     msg.ack();
   } catch (e) {
     console.error(`upload ${upload_id} p.${page_no}:`, e);
-    if (msg.attempts >= MAX_ATTEMPTS) {
-      await setPage({ status: "error", error: String(e.message || e).slice(0, 300) });
+    const ja = japaneseError(e);
+    // 400（依頼の形の誤り）は何度やっても同じなので、すぐ失敗にする
+    if (msg.attempts >= MAX_ATTEMPTS || e?.status === 400 || e?.status === 401) {
+      await setPage({ status: "error", error: ja });
       msg.ack();
     } else {
-      await setPage({ status: "queued", error: String(e.message || e).slice(0, 300) });
+      await setPage({ status: "queued", error: ja });
       msg.retry({ delaySeconds: 15 * msg.attempts });
     }
   }
@@ -294,11 +315,19 @@ export default {
             SUM(p.reader = 'claude') AS by_claude,
             SUM(p.reader = 'workers-ai') AS by_workers_ai,
             MAX(p.updated_at) AS updated_at,
-            GROUP_CONCAT(CASE WHEN p.status = 'error' THEN 'p.' || p.page_no || ': ' || p.error END, ' / ') AS errors
+            GROUP_CONCAT(DISTINCT CASE WHEN p.status = 'error' THEN p.error END) AS errors
           FROM uploads u JOIN upload_pages p ON p.upload_id = u.id
           WHERE u.created_at >= datetime('now','localtime','-3 days')
           GROUP BY u.id ORDER BY u.id DESC LIMIT 50`).all();
         return json({ uploads: results, reader: (env.READER || "claude").toLowerCase() });
+      }
+
+      // 失敗したページを取り消す（同じPDFを何度も入れてしまったときなど）
+      if (path === "/api/uploads/discard" && method === "POST") {
+        const { results } = await env.DB.prepare("SELECT upload_id, page_no FROM upload_pages WHERE status = 'error'").all();
+        await Promise.all(results.map((r) => env.PDFS.delete(pageKey(r.upload_id, r.page_no))));
+        await env.DB.prepare("DELETE FROM upload_pages WHERE status = 'error'").run();
+        return json({ ok: true, count: results.length });
       }
 
       // 失敗したページを読み直す
@@ -391,7 +420,7 @@ export default {
       return env.ASSETS.fetch(request);
     } catch (e) {
       console.error(e);
-      return json({ error: String(e.message || e) }, 500);
+      return json({ error: japaneseError(e) }, 500);
     }
   },
 };
