@@ -62,14 +62,12 @@ async function showModels(month) {
 function drawModels() {
   const q = $("tvModelFilter").value.trim().normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "");
   const list = tvModels.filter((m) => !q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q));
-  const max = Math.max(0.0001, ...list.map((m) => m.rate || 0));
   $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}">
     <td>${h(m.name)}</td>
     <td class="n">${m.opening.toLocaleString()}台</td>
     <td class="n">${m.sold.toLocaleString()}台</td>
     <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
-    <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / max) * 190)}px"></div></td>
-  </tr>`).join("") || '<tr><td colspan="5" class="tv-dim">該当する車がありません</td></tr>';
+  </tr>`).join("") || '<tr><td colspan="4" class="tv-dim">該当する車がありません</td></tr>';
 }
 $("tvModelFilter").addEventListener("input", drawModels);
 
