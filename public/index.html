@@ -89,7 +89,7 @@
   .tv-table thead th { position: static; cursor: default; }
   .tv-rate { font-weight: 800; font-size: 15px; color: #0b2b87; }
   .tv-bar { height: 10px; background: var(--accent); border-radius: 5px; min-width: 2px; }
-  .tv-manual { width: 80px; text-align: right; }
+  .tv-table tbody tr.sel td { background: #fff5c4; }
   .tv-link { color: #0646b0; cursor: pointer; text-decoration: underline; }
   .tv-dim { color: #99a; }
 </style>
@@ -148,14 +148,23 @@
   <div class="tv-wrap">
     <div class="tv-card">
       <h2>月ごとの回転率</h2>
-      <div class="tv-note">回転率 ＝ その月の販売台数 ÷ 月初在庫。販売台数は ①手入力 → ②販売データCSV（契約日付の月で数える）→ ③月初在庫の差（翌月の月初在庫に無い車）の順で使います。手入力を空にすると自動に戻ります。</div>
+      <div class="tv-note">回転率 ＝ その月の販売台数（販売データの契約日付の月で数える）÷ 月初在庫。月を押すと、下に車名ごとの回転率が出ます。</div>
       <div style="overflow:auto;margin-top:8px">
         <table class="tv-table">
-          <thead><tr><th>月</th><th>月初在庫</th><th>在庫金額（仕入）</th><th>販売台数<br>（販売データ）</th><th>販売台数<br>（在庫の差）</th><th>販売台数<br>（手入力）</th><th>回転率</th><th style="width:160px"></th><th>削除</th></tr></thead>
+          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th style="width:160px"></th><th>削除</th></tr></thead>
           <tbody id="tvRows"></tbody>
         </table>
       </div>
       <div class="empty" id="tvEmpty" hidden>まだデータがありません。月初在庫・販売データのCSVを上の枠にドロップしてください。</div>
+    </div>
+    <div class="tv-card" id="tvModelCard" hidden>
+      <h2 id="tvModelTitle"></h2>
+      <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。数字にマウスを乗せると台数が出ます。</div>
+      <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
+      <div style="overflow:auto;max-height:60vh">
+        <table class="tv-table" style="min-width:0;width:auto"><thead><tr><th style="min-width:200px">車名</th><th>回転率</th><th style="width:200px"></th></tr></thead>
+        <tbody id="tvModelRows"></tbody></table>
+      </div>
     </div>
     <div class="tv-card" id="tvSoldCard" hidden>
       <h2 id="tvSoldTitle"></h2>

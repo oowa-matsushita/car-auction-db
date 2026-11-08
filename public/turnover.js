@@ -14,11 +14,11 @@ addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 
 // ---------- 回転率 ----------
 const yen = (v) => (v == null ? "" : Number(v).toLocaleString() + "円");
-const manYen = (v) => (v == null ? "" : (v / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 }) + "万円");
 const pct = (r) => (r == null ? "—" : (r * 100).toFixed(1) + "%");
 const monthLabel = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
 const tvLog = (s) => ($("tvLog").textContent = s);
 
+let tvMonth = null, tvModels = [];
 async function loadTurnover() {
   let data;
   try {
@@ -30,26 +30,47 @@ async function loadTurnover() {
   const maxRate = Math.max(0.0001, ...months.map((m) => m.rate || 0));
   $("tvEmpty").hidden = months.length > 0;
   $("tvRows").innerHTML = months.map((m) => `
-    <tr>
+    <tr data-month="${m.month}" class="${m.month === tvMonth ? "sel" : ""}" style="cursor:pointer" title="押すと車名ごとの回転率を表示">
       <td><b>${monthLabel(m.month)}</b></td>
       <td class="n">${m.item_count == null ? '<span class="tv-dim">未登録</span>' : m.item_count.toLocaleString() + "台"}</td>
-      <td class="n">${manYen(m.stock_cost)}</td>
-      <td class="n">${m.sold_sales == null ? '<span class="tv-dim">未登録</span>'
-        : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold_sales.toLocaleString()}台</span>`}</td>
-      <td class="n">${m.sold_diff == null
-        ? `<span class="tv-dim" title="${monthLabel(m.month)}と${monthLabel(m.next_month)}の月初在庫があると数えます">—</span>`
-        : `<span class="tv-link" data-sold="${m.month}" title="翌月の在庫に無い車の一覧を見る">${m.sold_diff.toLocaleString()}台</span>`}</td>
-      <td class="n"><input class="tv-manual" type="number" min="0" step="1" data-manual="${m.month}" value="${m.sold_manual ?? ""}" placeholder="自動"></td>
-      <td class="n"><span class="tv-rate">${pct(m.rate)}</span>${m.rate == null ? "" : `<div class="tv-dim" style="font-size:11px">${m.sold_source}：${m.sold.toLocaleString()}台 ÷ ${m.item_count.toLocaleString()}台</div>`}</td>
+      <td class="n">${m.sold == null ? '<span class="tv-dim">未登録</span>'
+        : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold.toLocaleString()}台</span>`}</td>
+      <td class="n tv-rate">${pct(m.rate)}</td>
       <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / maxRate) * 150)}px"></div></td>
       <td style="white-space:nowrap">${m.item_count == null ? "" : `<button class="btn btn-sub" data-del="${m.month}" style="padding:2px 6px">在庫</button>`}
-        ${m.sold_sales == null ? "" : `<button class="btn btn-sub" data-delsales="${m.month}" style="padding:2px 6px">販売</button>`}</td>
+        ${m.sold == null ? "" : `<button class="btn btn-sub" data-delsales="${m.month}" style="padding:2px 6px">販売</button>`}</td>
     </tr>`).join("");
+  // 最初は、月初在庫と販売データがそろっている一番新しい月を表示
+  if (!tvMonth || !months.some((m) => m.month === tvMonth)) {
+    const first = months.find((m) => m.rate != null) || months[0];
+    if (first) showModels(first.month); else $("tvModelCard").hidden = true;
+  } else showModels(tvMonth);
 }
 
+async function showModels(month) {
+  tvMonth = month;
+  document.querySelectorAll("#tvRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.month === month));
+  const res = await fetch(`/api/turnover/${month}/models`);
+  const j = await res.json();
+  if (!res.ok) return tvLog("❌ " + (j.error || "読み込みに失敗しました"));
+  tvModels = j.models;
+  $("tvModelTitle").textContent = `車名ごとの回転率（${monthLabel(month)}）`;
+  $("tvModelCard").hidden = false;
+  drawModels();
+}
+function drawModels() {
+  const q = $("tvModelFilter").value.trim().normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "");
+  const list = tvModels.filter((m) => !q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q));
+  const max = Math.max(0.0001, ...list.map((m) => m.rate || 0));
+  $("tvModelRows").innerHTML = list.map((m) => `<tr>
+    <td>${h(m.name)}</td>
+    <td class="n tv-rate" title="販売 ${m.sold}台 ÷ 月初在庫 ${m.opening}台">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
+    <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / max) * 190)}px"></div></td>
+  </tr>`).join("") || '<tr><td colspan="3" class="tv-dim">該当する車がありません</td></tr>';
+}
+$("tvModelFilter").addEventListener("input", drawModels);
+
 $("tvRows").addEventListener("click", async (e) => {
-  const sold = e.target.closest("[data-sold]");
-  if (sold) return showSold(sold.dataset.sold);
   const sales = e.target.closest("[data-sales]");
   if (sales) return showSales(sales.dataset.sales);
   const ds = e.target.closest("[data-delsales]");
@@ -64,35 +85,11 @@ $("tvRows").addEventListener("click", async (e) => {
     if (!confirm(`${monthLabel(del.dataset.del)}の月初在庫を削除しますか？`)) return;
     await fetch(`/api/inventory/${del.dataset.del}`, { method: "DELETE" });
     $("tvSoldCard").hidden = true;
-    loadTurnover();
+    return loadTurnover();
   }
+  const tr = e.target.closest("tr[data-month]");
+  if (tr) showModels(tr.dataset.month);
 });
-$("tvRows").addEventListener("change", async (e) => {
-  const inp = e.target.closest("[data-manual]");
-  if (!inp) return;
-  const v = inp.value.trim();
-  const res = await fetch(`/api/turnover/${inp.dataset.manual}`, {
-    method: "PUT", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sold_count: v === "" ? null : Number(v) }),
-  });
-  if (!res.ok) alert((await res.json().catch(() => ({}))).error || "保存に失敗しました");
-  loadTurnover();
-});
-
-async function showSold(month) {
-  const res = await fetch(`/api/turnover/${month}/sold`);
-  const j = await res.json();
-  if (!res.ok) return alert(j.error || "読み込みに失敗しました");
-  $("tvSoldTitle").textContent = `${monthLabel(month)}に売れた車（${monthLabel(j.next_month)}の月初在庫に無い車）：${j.rows.length}台`;
-  $("tvSoldHead").innerHTML = "<tr><th>在庫No</th><th>メーカー</th><th>車名</th><th>初度</th><th>色</th><th>走行(km)</th><th>型式</th><th>車台番号</th><th>予定売価</th><th>仕入金額</th><th>入庫担当</th></tr>";
-  $("tvSoldRows").innerHTML = j.rows.map((r) => `<tr>
-    <td>${h(r.stock_no)}</td><td>${h(r.maker)}</td><td>${h(r.car_name)}</td><td>${h(r.first_reg)}</td>
-    <td class="clip" style="max-width:140px" title="${h(r.color)}">${h(r.color)}</td>
-    <td class="n">${r.mileage_km == null ? "" : r.mileage_km.toLocaleString()}</td><td>${h(r.model_code)}</td><td>${h(r.chassis_no)}</td>
-    <td class="n">${r.planned_price ? yen(r.planned_price) : ""}</td><td class="n">${r.cost ? yen(r.cost) : ""}</td><td>${h(r.staff)}</td></tr>`).join("");
-  $("tvSoldCard").hidden = false;
-  $("tvSoldCard").scrollIntoView({ behavior: "smooth" });
-}
 
 async function showSales(month) {
   const res = await fetch(`/api/turnover/${month}/sales`);
