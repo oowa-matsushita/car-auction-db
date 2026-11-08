@@ -91,6 +91,9 @@
   .tv-bar { height: 10px; background: var(--accent); border-radius: 5px; min-width: 2px; }
   .tv-table tbody tr.sel td { background: #fff5c4; }
   #tvModelRows tr { cursor: pointer; }
+  #tvModelHead th { cursor: pointer; user-select: none; white-space: nowrap; }
+  #tvModelHead th:hover { background: #d5dde8; }
+  #tvModelHead th.on { background: #ffe08f; }
   .tv-pop { position: fixed; z-index: 60; display: none; width: 360px; background: #fff; border: 1px solid #b9c3d1; border-radius: 8px;
     box-shadow: 0 8px 24px rgba(10,20,40,.22); padding: 10px 12px; pointer-events: none; }
   .tv-pop b { font-size: 14px; }
@@ -181,7 +184,7 @@
       <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名にマウスを乗せると回転率の推移のグラフ、押すと大きなグラフが出ます。</div>
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
       <div style="overflow:auto;max-height:60vh">
-        <table class="tv-table" style="min-width:0;width:auto"><thead><tr><th style="min-width:200px">車名</th><th>月初在庫</th><th>販売台数</th><th>回転率</th></tr></thead>
+        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th></tr></thead>
         <tbody id="tvModelRows"></tbody></table>
       </div>
     </div>

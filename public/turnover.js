@@ -59,9 +59,35 @@ async function showModels(month) {
   $("tvModelCard").hidden = false;
   drawModels();
 }
+// 並べ替え（見出しを押すたびに 降順 ⇔ 昇順。値が無いものはいつも最後）
+const tvSort = { key: "rate", dir: "desc" };
+$("tvModelHead").addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-sort]");
+  if (!th) return;
+  const k = th.dataset.sort;
+  if (tvSort.key === k) tvSort.dir = tvSort.dir === "desc" ? "asc" : "desc";
+  else { tvSort.key = k; tvSort.dir = k === "name" ? "asc" : "desc"; }
+  drawModels();
+});
+function sortModels(list) {
+  const { key, dir } = tvSort, sign = dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    const va = a[key], vb = b[key];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const c = key === "name" ? String(va).localeCompare(String(vb), "ja") : va - vb;
+    return c * sign || b.sold - a.sold || a.name.localeCompare(b.name, "ja");
+  });
+}
 function drawModels() {
+  document.querySelectorAll("#tvModelHead th").forEach((th) => {
+    const on = th.dataset.sort === tvSort.key;
+    th.classList.toggle("on", on);
+    th.textContent = th.textContent.replace(/ [▼▲]$/, "") + (on ? (tvSort.dir === "desc" ? " ▼" : " ▲") : "");
+  });
   const q = $("tvModelFilter").value.trim().normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "");
-  const list = tvModels.filter((m) => !q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q));
+  const list = sortModels(tvModels).filter((m) => !q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q));
   $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}">
     <td>${h(m.name)}</td>
     <td class="n">${m.opening.toLocaleString()}台</td>
