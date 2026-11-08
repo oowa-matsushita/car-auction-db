@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>仕入れ台帳</title>
+<title>MMS</title>
 <style>
   :root {
     --navy: #13234a; --navy-2: #22386b; --accent: #10b8c4; --orange: #f26b1d;
@@ -71,12 +71,39 @@
   #preview { position: fixed; z-index: 50; display: none; background: #fff; border: 2px solid var(--navy); border-radius: 6px; box-shadow: 0 8px 30px rgba(0,0,0,.35); padding: 4px; pointer-events: none; }
   #preview img { display: block; width: 100%; height: auto; }
   #preview .msg { padding: 30px; color: #667; text-align: center; }
+  /* ---- タブ（画面の切り替え） ---- */
+  .tabs { display: flex; align-items: flex-end; gap: 2px; background: #0b1530; padding: 6px 10px 0; }
+  .tabs .logo { color: #fff; font-weight: 800; font-size: 18px; letter-spacing: .12em; margin: 0 14px 5px 2px; }
+  .tabs button { border: 0; border-radius: 7px 7px 0 0; padding: 7px 18px; background: #24345c; color: #b9c6e4; font: inherit; font-weight: 700; cursor: pointer; }
+  .tabs button:hover { background: #2f4377; color: #fff; }
+  .tabs button.on { background: var(--navy); color: #fff; box-shadow: inset 0 3px 0 var(--accent); }
+  .tab[hidden] { display: none !important; }
+
+  /* ---- 回転率 ---- */
+  .tv-wrap { padding: 12px; }
+  .tv-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+  .tv-card h2 { margin: 0 0 8px; font-size: 15px; }
+  .tv-note { color: #556; font-size: 12px; }
+  .tv-table td.n, .tv-table th { text-align: right; }
+  .tv-table th:first-child, .tv-table td:first-child { text-align: left; }
+  .tv-table thead th { position: static; cursor: default; }
+  .tv-rate { font-weight: 800; font-size: 15px; color: #0b2b87; }
+  .tv-bar { height: 10px; background: var(--accent); border-radius: 5px; min-width: 2px; }
+  .tv-manual { width: 80px; text-align: right; }
+  .tv-link { color: #0646b0; cursor: pointer; text-decoration: underline; }
+  .tv-dim { color: #99a; }
 </style>
 </head>
 <body>
 
+<nav class="tabs">
+  <span class="logo">MMS</span>
+  <button data-tab="ledger">📋 仕入れ台帳</button>
+  <button data-tab="turnover">🔄 回転率</button>
+</nav>
+
+<section class="tab" id="tab-ledger">
 <div class="top">
-  <h1>仕入れ台帳</h1>
   <div class="filters">
     <span>担当者</span><input id="f_buyer" class="w-s" placeholder="名前">
     <span>キーワード</span><input id="f_q" class="w-m" placeholder="車名・型式・車台番号">
@@ -108,6 +135,36 @@
   <table id="grid"><thead><tr id="hdr"></tr></thead><tbody id="rows"></tbody></table>
   <div class="empty" id="empty" hidden>データがありません。出品票PDFをドロップして登録してください。</div>
 </div>
+</section>
+
+<section class="tab" id="tab-turnover" hidden>
+  <div class="top">
+    <span style="font-size:16px;font-weight:700">🔄 回転率</span>
+    <label class="drop" id="dropInv">📥 月初在庫・販売データのCSVをドロップ / クリック（複数可）
+      <input type="file" id="inInv" accept=".csv,.tsv,.txt" multiple hidden></label>
+    <span style="font-size:12px;color:#c9e6ee">月</span><input type="month" id="invMonth" title="ファイル名に年月（例: 202610）が無いときに使います">
+    <div id="tvLog" style="font-size:12px;color:#ffe9a8"></div>
+  </div>
+  <div class="tv-wrap">
+    <div class="tv-card">
+      <h2>月ごとの回転率</h2>
+      <div class="tv-note">回転率 ＝ その月の販売台数 ÷ 月初在庫。販売台数は ①手入力 → ②販売データCSV（契約日付の月で数える）→ ③月初在庫の差（翌月の月初在庫に無い車）の順で使います。手入力を空にすると自動に戻ります。</div>
+      <div style="overflow:auto;margin-top:8px">
+        <table class="tv-table">
+          <thead><tr><th>月</th><th>月初在庫</th><th>在庫金額（仕入）</th><th>販売台数<br>（販売データ）</th><th>販売台数<br>（在庫の差）</th><th>販売台数<br>（手入力）</th><th>回転率</th><th style="width:160px"></th><th>削除</th></tr></thead>
+          <tbody id="tvRows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="tvEmpty" hidden>まだデータがありません。月初在庫・販売データのCSVを上の枠にドロップしてください。</div>
+    </div>
+    <div class="tv-card" id="tvSoldCard" hidden>
+      <h2 id="tvSoldTitle"></h2>
+      <div style="overflow:auto;max-height:50vh">
+        <table><thead id="tvSoldHead"></thead><tbody id="tvSoldRows"></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
 
 <div id="preview"><img alt="出品票"><div class="msg" hidden>出品票を読み込み中…</div></div>
 <dialog id="pdfDlg">
@@ -449,5 +506,6 @@ document.querySelector(".scroll").addEventListener("scroll", hidePreview);
 load();
 watchProgress();
 </script>
+<script src="turnover.js"></script>
 </body>
 </html>

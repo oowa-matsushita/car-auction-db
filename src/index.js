@@ -1,5 +1,7 @@
 import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
+import { json, parseDelimited } from "./util.js";
+import { TURNOVER_SCHEMA, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
 // DBの列名（id / created_at / updated_at 以外）
@@ -44,9 +46,6 @@ const CSV_COLS = [
 ];
 
 // ---- ユーティリティ -----------------------------------------------------------
-const json = (data, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8" } });
-
 function normalize(field, v) {
   if (v === undefined || v === null) return null;
   if (typeof v === "boolean") return INT_FIELDS.has(field) || REAL_FIELDS.has(field) ? (v ? 1 : 0) : String(v);
@@ -116,32 +115,6 @@ async function insertVehicle(db, v) {
 }
 const insertedCount = (results) => results.reduce((a, r) => a + (r?.meta?.changes || 0), 0);
 
-// 区切り文字（タブ/カンマ）を自動判定する簡易パーサ（ダブルクォート対応）
-function parseDelimited(text) {
-  text = text.replace(/^﻿/, "");
-  const firstLine = text.split(/\r?\n/, 1)[0];
-  const sep = firstLine.includes("\t") ? "\t" : ",";
-  const rows = [];
-  let row = [], cur = "", q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) {
-      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
-      else cur += c;
-    } else if (c === '"' && cur === "") q = true;
-    else if (c === sep) { row.push(cur); cur = ""; }
-    else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(cur); cur = "";
-      if (row.some((x) => x !== "")) rows.push(row);
-      row = [];
-    } else cur += c;
-  }
-  row.push(cur);
-  if (row.some((x) => x !== "")) rows.push(row);
-  return rows;
-}
-
 const cellOut = (v, sep) => {
   if (v === null || v === undefined) return "";
   const s = String(v);
@@ -169,7 +142,7 @@ let schemaReady = null;
 function ensureSchema(db) {
   if (!schemaReady) {
     schemaReady = (async () => {
-      await db.batch(SCHEMA.map((q) => db.prepare(q)));
+      await db.batch([...SCHEMA, ...TURNOVER_SCHEMA].map((q) => db.prepare(q)));
       for (const q of ADDED_COLUMNS) await db.prepare(q).run().catch(() => {});
     })().catch((e) => { schemaReady = null; throw e; });
   }
@@ -481,7 +454,13 @@ export default {
         });
       }
 
-      if (path.startsWith("/api/")) return json({ error: "not found" }, 404);
+      // 回転率（月初在庫・販売台数）
+      if (path.startsWith("/api/turnover") || path.startsWith("/api/inventory") || path.startsWith("/api/sales")) {
+        const res = await handleTurnover(request, env, url);
+        if (res) return res;
+      }
+
+      if (path.startsWith("/api/")) return json({ error: "見つかりません" }, 404);
       return env.ASSETS.fetch(request);
     } catch (e) {
       console.error(e);
