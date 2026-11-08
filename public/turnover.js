@@ -182,9 +182,16 @@ function rateChartSvg(points, { w, h, big }) {
   const carBelow = lp0 && la0 && lp0.rate < la0.all, close = lp0 && la0 && Math.abs(y(lp0.rate) - y(la0.all)) < 12;
   line("all", AVG, true, "全体", close && !carBelow ? 8 : 0);
   line("rate", BAR, false, "この車", close && carBelow ? 8 : 0);
-  // 最新の月だけ数字を出す
-  const li = points.length - 1, lp = points[li];
-  if (lp && lp.rate != null) g += `<text x="${cx(li)}" y="${y(lp.rate) - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="${INK}">${(lp.rate * 100).toFixed(1)}%</text>`;
+  // 各点に％を出す（上にある線は点の上、下にある線は点の下に書いて重ならないようにする）
+  const fs = big ? 11 : 9.5;
+  const label = (x, yv, v, above, bold) =>
+    `<text x="${x}" y="${above ? yv - 8 : yv + fs + 6}" text-anchor="middle" font-size="${fs}" ${bold ? 'font-weight="700"' : ""} fill="${bold ? INK : INK2}"
+       stroke="#fff" stroke-width="3" paint-order="stroke">${(v * 100).toFixed(1)}%</text>`;
+  points.forEach((p, i) => {
+    const carAbove = p.all == null || (p.rate != null && p.rate >= p.all);
+    if (p.rate != null) g += label(cx(i), y(p.rate), p.rate, carAbove, true);
+    if (p.all != null) g += label(cx(i), y(p.all), p.all, !carAbove || p.rate == null, false);
+  });
   // マウス用の当たり判定（棒より広く）
   if (big) points.forEach((p, i) => { g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${ih}" fill="transparent"/>`; });
   return `<svg class="tv-chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">${g}</svg>`;
