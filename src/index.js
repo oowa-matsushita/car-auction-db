@@ -1,4 +1,4 @@
-import { splitPages, extractPageJpeg } from "./pdf.js";
+import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -386,8 +386,29 @@ export default {
         return new Response(jpeg, { headers });
       }
 
-      // PDF表示
-      const pm = path.match(/^\/api\/pdf(?:-page)?\/(.+)$/);
+      // 1台分（1ページ）だけのPDF。初回はPDFから取り出してR2に保存する
+      const pp = path.match(/^\/api\/pdf-page\/(.+)$/);
+      if (pp && method === "GET") {
+        const key = decodeURIComponent(pp[1]);
+        const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+        const cacheKey = `pagepdf/${key}/${page}.pdf`;
+        const headers = {
+          "content-type": "application/pdf",
+          "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(key.split("/").pop().replace(/\.pdf$/i, "") + `_p${page}.pdf`)}`,
+          "cache-control": "private, max-age=604800",
+        };
+        const cached = await env.PDFS.get(cacheKey);
+        if (cached) return new Response(cached.body, { headers });
+        const pdf = await env.PDFS.get(key);
+        if (!pdf) return new Response("PDFが見つかりません", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+        const one = await extractOnePage(new Uint8Array(await pdf.arrayBuffer()), page - 1);
+        if (!one) return new Response("そのページはPDFにありません", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+        await env.PDFS.put(cacheKey, one, { httpMetadata: { contentType: "application/pdf" } });
+        return new Response(one, { headers });
+      }
+
+      // PDF表示（全ページ）
+      const pm = path.match(/^\/api\/pdf\/(.+)$/);
       if (pm && method === "GET") {
         const key = decodeURIComponent(pm[1]);
         const obj = await env.PDFS.get(key);

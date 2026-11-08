@@ -13,6 +13,16 @@ export async function splitPages(bytes) {
   return pages;
 }
 
+// PDF から 1 ページだけを取り出した PDF を作る（pageIndex は 0 始まり）
+export async function extractOnePage(bytes, pageIndex) {
+  const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+  if (pageIndex < 0 || pageIndex >= src.getPageCount()) return null;
+  const doc = await PDFDocument.create();
+  const [page] = await doc.copyPages(src, [pageIndex]);
+  doc.addPage(page);
+  return doc.save();
+}
+
 // スキャンした PDF のページに埋め込まれている JPEG 画像（いちばん大きいもの）を取り出す。
 // Workers AI の画像モデルは PDF を直接読めないため。JPEG 以外の形式なら null。
 export async function extractPageJpeg(pdfBytes, pageIndex = 0) {

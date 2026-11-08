@@ -113,6 +113,7 @@
 <dialog id="pdfDlg">
   <div class="hd"><b id="pdfTtl"></b><span style="flex:1"></span>
     <a id="pdfOpen" href="#" target="_blank">新しいタブで開く</a>
+    <a id="pdfAll" href="#" target="_blank">PDF全体を開く</a>
     <button class="btn btn-sub" id="pdfClose">閉じる ✕</button></div>
   <iframe id="pdfFrame" title="PDF"></iframe>
 </dialog>
@@ -293,10 +294,12 @@ function openEdit(r) {
 
 // ---------- PDF表示 ----------
 function openPdf(r) {
-  const url = `/api/pdf/${encodeURIComponent(r.pdf_key)}#page=${r.page_no || 1}&view=FitH`;
+  // その車のページだけを表示する（PDF全体は「PDF全体を開く」から）
+  const url = `/api/pdf-page/${encodeURIComponent(r.pdf_key)}?page=${r.page_no || 1}#view=FitH`;
   $("pdfTtl").textContent = `${r.car_name || ""} ${r.grade || ""}（p.${r.page_no || 1}）`;
   $("pdfFrame").src = url;
   $("pdfOpen").href = url;
+  $("pdfAll").href = `/api/pdf/${encodeURIComponent(r.pdf_key)}#page=${r.page_no || 1}`;
   $("pdfDlg").showModal();
 }
 $("pdfClose").onclick = () => $("pdfDlg").close();
