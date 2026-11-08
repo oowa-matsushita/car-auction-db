@@ -15,6 +15,7 @@ const VEHICLE_PROPS = {
   car_name: nullable("string"),
   grade: nullable("string"),
   model_code: nullable("string", "型式 例: DBA-ZRR80W"),
+  chassis_no: nullable("string", "車台番号 例: ZVW50-1234567。一部が伏せ字（*）なら見えている通りに書く"),
   year: nullable("integer", "年式（西暦）。R5→2023, H30→2018"),
   first_reg_month: nullable("integer", "初度登録の月 1-12"),
   displacement_cc: nullable("integer"),

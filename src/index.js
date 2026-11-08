@@ -9,7 +9,7 @@ const FIELDS = [
   "displacement_cc", "fuel", "shift", "mileage_km", "inspection", "color", "color_code", "score",
   "score_exterior", "score_interior", "equipment", "start_price_man", "bid_price_man",
   "planned_price_man", "result", "handwritten_note", "inspector_note", "needs_review",
-  "review_reason", "buyer", "member_name",
+  "review_reason", "buyer", "member_name", "chassis_no",
 ];
 const INT_FIELDS = new Set(["upload_id", "page_no", "year", "first_reg_month", "displacement_cc", "mileage_km", "needs_review"]);
 const REAL_FIELDS = new Set(["start_price_man", "bid_price_man", "planned_price_man"]);
@@ -27,14 +27,14 @@ const TSV_MAP = [
   ["start", "start_price_man"], ["bid", "bid_price_man"], ["plan", "planned_price_man"],
   ["result", "result"], ["member", "member_name"], ["buyer", "buyer"], ["note", "handwritten_note"],
   ["review", "review_reason"], ["inspector", "inspector_note"], ["fuel", "fuel"],
-  ["round", "auction_round"], ["first_reg_month", "first_reg_month"], ["equipment", "equipment"],
+  ["round", "auction_round"], ["first_reg_month", "first_reg_month"], ["equipment", "equipment"], ["chassis", "chassis_no"],
 ];
 
 // CSV出力の列
 const CSV_COLS = [
   ["buyer", "仕入れ担当"], ["auction_date", "開催日"], ["auction_house", "会場"], ["auction_round", "回"],
   ["lot_no", "出品番号"], ["maker", "メーカー"], ["car_name", "車名"], ["grade", "グレード"],
-  ["model_code", "型式"], ["year", "年式"], ["first_reg_month", "初度登録月"], ["displacement_cc", "排気量"],
+  ["model_code", "型式"], ["chassis_no", "車台番号"], ["year", "年式"], ["first_reg_month", "初度登録月"], ["displacement_cc", "排気量"],
   ["fuel", "燃料"], ["shift", "シフト"], ["mileage_km", "走行(km)"], ["inspection", "車検"],
   ["color", "色"], ["color_code", "カラーNo"], ["score", "評価点"], ["score_exterior", "外装"],
   ["score_interior", "内装"], ["equipment", "装備"], ["start_price_man", "スタート(万円)"],
@@ -72,8 +72,8 @@ function buildWhere(url) {
   if (p.get("q")) {
     // スペース区切りで AND 検索
     for (const w of p.get("q").split(/[\s　]+/).filter(Boolean)) {
-      where.push("(car_name LIKE ? OR model_code LIKE ? OR grade LIKE ? OR maker LIKE ? OR color LIKE ? OR handwritten_note LIKE ?)");
-      args.push(...Array(6).fill(like(w)));
+      where.push("(car_name LIKE ? OR model_code LIKE ? OR grade LIKE ? OR maker LIKE ? OR color LIKE ? OR handwritten_note LIKE ? OR chassis_no LIKE ?)");
+      args.push(...Array(7).fill(like(w)));
     }
   }
   if (p.get("year_from")) { where.push("year >= ?"); args.push(Number(p.get("year_from"))); }
@@ -132,7 +132,7 @@ const cellOut = (v, sep) => {
 // ---- テーブル自動作成（初回アクセス時。D1コンソールでの作業は不要） ----
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS uploads ( id INTEGER PRIMARY KEY AUTOINCREMENT, pdf_key TEXT NOT NULL, filename TEXT, status TEXT, vehicle_count INTEGER, error TEXT, created_at TEXT DEFAULT (datetime('now','localtime')) )",
-  "CREATE TABLE IF NOT EXISTS vehicles ( id INTEGER PRIMARY KEY AUTOINCREMENT, upload_id INTEGER, pdf_key TEXT, page_no INTEGER, control_no TEXT, sheet_format TEXT, auction_house TEXT, auction_date TEXT, auction_round TEXT, lot_no TEXT, maker TEXT, car_name TEXT, grade TEXT, model_code TEXT, year INTEGER, first_reg_month INTEGER, displacement_cc INTEGER, fuel TEXT, shift TEXT, mileage_km INTEGER, inspection TEXT, color TEXT, color_code TEXT, score TEXT, score_exterior TEXT, score_interior TEXT, equipment TEXT, start_price_man REAL, bid_price_man REAL, planned_price_man REAL, result TEXT, handwritten_note TEXT, inspector_note TEXT, needs_review INTEGER DEFAULT 0, review_reason TEXT, buyer TEXT, member_name TEXT, created_at TEXT DEFAULT (datetime('now','localtime')), updated_at TEXT DEFAULT (datetime('now','localtime')) )",
+  "CREATE TABLE IF NOT EXISTS vehicles ( id INTEGER PRIMARY KEY AUTOINCREMENT, upload_id INTEGER, pdf_key TEXT, page_no INTEGER, control_no TEXT, sheet_format TEXT, auction_house TEXT, auction_date TEXT, auction_round TEXT, lot_no TEXT, maker TEXT, car_name TEXT, grade TEXT, model_code TEXT, year INTEGER, first_reg_month INTEGER, displacement_cc INTEGER, fuel TEXT, shift TEXT, mileage_km INTEGER, inspection TEXT, color TEXT, color_code TEXT, score TEXT, score_exterior TEXT, score_interior TEXT, equipment TEXT, start_price_man REAL, bid_price_man REAL, planned_price_man REAL, result TEXT, handwritten_note TEXT, inspector_note TEXT, needs_review INTEGER DEFAULT 0, review_reason TEXT, buyer TEXT, member_name TEXT, chassis_no TEXT, created_at TEXT DEFAULT (datetime('now','localtime')), updated_at TEXT DEFAULT (datetime('now','localtime')) )",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_car ON vehicles(car_name)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_date ON vehicles(auction_date)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_buyer ON vehicles(buyer)",
@@ -140,7 +140,10 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS upload_pages ( upload_id INTEGER NOT NULL, page_no INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', reader TEXT, vehicle_count INTEGER, error TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')), PRIMARY KEY (upload_id, page_no) )",
 ];
 // 既存のデータベースに後から足した列（すでにある場合のエラーは無視）
-const ADDED_COLUMNS = ["ALTER TABLE uploads ADD COLUMN pages_total INTEGER"];
+const ADDED_COLUMNS = [
+  "ALTER TABLE uploads ADD COLUMN pages_total INTEGER",
+  "ALTER TABLE vehicles ADD COLUMN chassis_no TEXT",
+];
 let schemaReady = null;
 function ensureSchema(db) {
   if (!schemaReady) {

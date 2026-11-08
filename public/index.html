@@ -76,7 +76,7 @@
   <h1>仕入れ台帳</h1>
   <div class="filters">
     <span>担当者</span><input id="f_buyer" class="w-s" placeholder="名前">
-    <span>キーワード</span><input id="f_q" class="w-m" placeholder="車名・型式・グレード">
+    <span>キーワード</span><input id="f_q" class="w-m" placeholder="車名・型式・車台番号">
     <span>会場</span><input id="f_auction_house" class="w-s" placeholder="USS東京 等">
     <span>年式</span><select id="f_year_from"></select>〜<select id="f_year_to"></select>
     <span>開催日</span><input type="date" id="f_date_from" class="w-d">〜<input type="date" id="f_date_to" class="w-d">
@@ -129,14 +129,14 @@ const COLUMNS = [
   ["bid_price_man", "落札金額", 1], ["planned_price_man", "予定車両価格", 1], ["diff", "予定−落札×1.1", 0],
   ["score", "評価", 1], ["extint", "外/内", 0], ["color_code", "カラーNo", 1], ["displacement_cc", "排気", 1],
   ["shift", "ｼﾌﾄ", 1], ["inspection", "車検", 1], ["lot_no", "出品番号", 1], ["maker", "メーカー", 1],
-  ["handwritten_note", "手書きメモ", 1], ["edit", "編集", 0],
+  ["handwritten_note", "手書きメモ", 1], ["chassis_no", "車台番号", 1], ["edit", "編集", 0],
 ];
 // 編集フォーム: [キー, ラベル, 強調, 全幅]
 const FORM = [
   ["start_price_man", "スタート金額(万円)", 1], ["bid_price_man", "落札金額(万円)", 1], ["planned_price_man", "予定車両価格(万円)", 1],
   ["buyer", "仕入れ担当者"], ["member_name", "会員名(印字)"], ["auction_date", "開催日(YYYY-MM-DD)"],
   ["auction_house", "会場"], ["auction_round", "開催回"], ["lot_no", "出品番号"], ["result", "結果"],
-  ["maker", "メーカー"], ["car_name", "車名"], ["grade", "グレード"], ["model_code", "型式"], ["year", "年式(西暦)"],
+  ["maker", "メーカー"], ["car_name", "車名"], ["grade", "グレード"], ["model_code", "型式"], ["chassis_no", "車台番号"], ["year", "年式(西暦)"],
   ["first_reg_month", "初度登録月"], ["displacement_cc", "排気量(cc)"], ["fuel", "燃料"], ["shift", "シフト"],
   ["mileage_km", "走行(km)"], ["inspection", "車検"], ["color", "色"], ["color_code", "カラーNo"],
   ["score", "評価点"], ["score_exterior", "外装"], ["score_interior", "内装"], ["equipment", "装備", 0, 1],

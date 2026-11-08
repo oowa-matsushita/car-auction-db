@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
   review_reason TEXT,
   buyer TEXT,
   member_name TEXT,
+  chassis_no TEXT,
   created_at TEXT DEFAULT (datetime('now','localtime')),
   updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
