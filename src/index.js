@@ -1,4 +1,4 @@
-import { splitPages } from "./pdf.js";
+import { splitPages, extractPageJpeg } from "./pdf.js";
 import { readPage } from "./reader.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -367,6 +367,23 @@ export default {
         if (!file || typeof file === "string") return json({ error: "ファイルがありません" }, 400);
         await env.PDFS.put(file.name, file.stream(), { httpMetadata: { contentType: "application/pdf" } });
         return json({ ok: true, pdf_key: file.name });
+      }
+
+      // 出品票のページ画像（マウスを乗せたときのプレビュー用）。初回はPDFから取り出してR2に保存する
+      const im = path.match(/^\/api\/page-image\/(.+)$/);
+      if (im && method === "GET") {
+        const key = decodeURIComponent(im[1]);
+        const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+        const cacheKey = `img/${key}/${page}.jpg`;
+        const headers = { "content-type": "image/jpeg", "cache-control": "private, max-age=604800" };
+        const cached = await env.PDFS.get(cacheKey);
+        if (cached) return new Response(cached.body, { headers });
+        const pdf = await env.PDFS.get(key);
+        if (!pdf) return new Response("PDFが見つかりません", { status: 404 });
+        const jpeg = await extractPageJpeg(new Uint8Array(await pdf.arrayBuffer()), page - 1);
+        if (!jpeg) return new Response("このページは画像として取り出せません", { status: 404 });
+        await env.PDFS.put(cacheKey, jpeg, { httpMetadata: { contentType: "image/jpeg" } });
+        return new Response(jpeg, { headers });
       }
 
       // PDF表示

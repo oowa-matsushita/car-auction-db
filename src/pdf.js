@@ -15,9 +15,10 @@ export async function splitPages(bytes) {
 
 // スキャンした PDF のページに埋め込まれている JPEG 画像（いちばん大きいもの）を取り出す。
 // Workers AI の画像モデルは PDF を直接読めないため。JPEG 以外の形式なら null。
-export async function extractPageJpeg(pageBytes) {
-  const doc = await PDFDocument.load(pageBytes, { ignoreEncryption: true, updateMetadata: false });
-  const page = doc.getPage(0);
+export async function extractPageJpeg(pdfBytes, pageIndex = 0) {
+  const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true, updateMetadata: false });
+  if (pageIndex < 0 || pageIndex >= doc.getPageCount()) return null;
+  const page = doc.getPage(pageIndex);
   let best = null;
   const visit = (resources, depth) => {
     if (!(resources instanceof PDFDict) || depth > 3) return;

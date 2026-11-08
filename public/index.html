@@ -68,6 +68,9 @@
   #pdfDlg .hd { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--navy); color: #fff; }
   #pdfDlg .hd a { color: #9fd0ff; font-size: 12px; }
   #pdfDlg iframe { width: 100%; height: calc(100% - 44px); border: 0; background: #555; }
+  #preview { position: fixed; z-index: 50; display: none; background: #fff; border: 2px solid var(--navy); border-radius: 6px; box-shadow: 0 8px 30px rgba(0,0,0,.35); padding: 4px; pointer-events: none; }
+  #preview img { display: block; width: 100%; height: auto; }
+  #preview .msg { padding: 30px; color: #667; text-align: center; }
 </style>
 </head>
 <body>
@@ -106,6 +109,7 @@
   <div class="empty" id="empty" hidden>データがありません。出品票PDFをドロップして登録してください。</div>
 </div>
 
+<div id="preview"><img alt="出品票"><div class="msg" hidden>出品票を読み込み中…</div></div>
 <dialog id="pdfDlg">
   <div class="hd"><b id="pdfTtl"></b><span style="flex:1"></span>
     <a id="pdfOpen" href="#" target="_blank">新しいタブで開く</a>
@@ -400,6 +404,41 @@ $("f_year_from").onchange = $("f_year_to").onchange = load;
 $("btnSearch").onclick = load;
 $("btnClear").onclick = () => { for (const k of FILTERS) $("f_" + k).value = ""; state.sort = ""; state.dir = "desc"; load(); };
 document.querySelectorAll(".filters input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); }));
+
+// ---------- マウスを乗せると出品票を表示 ----------
+const pv = $("preview"), pvImg = pv.querySelector("img"), pvMsg = pv.querySelector(".msg");
+let pvTimer = null, pvRow = null;
+function placePreview(x, y) {
+  const w = Math.min(window.innerWidth * 0.6, 1000), hgt = w * 0.707 + 8;
+  pv.style.width = w + "px";
+  // マウスと反対側に出す（表の行が隠れないように）
+  pv.style.left = (x < window.innerWidth / 2 ? window.innerWidth - w - 16 : 16) + "px";
+  pv.style.top = Math.max(8, Math.min(y - hgt / 2, window.innerHeight - hgt - 8)) + "px";
+}
+function hidePreview() { clearTimeout(pvTimer); pvRow = null; pv.style.display = "none"; }
+$("rows").addEventListener("mousemove", (e) => {
+  const tr = e.target.closest("tr");
+  if (!tr) return hidePreview();
+  const r = state.rows[tr.dataset.i];
+  if (!r || !r.pdf_key) return hidePreview();
+  if (pvRow === r) { if (pv.style.display === "block") placePreview(e.clientX, e.clientY); return; }
+  hidePreview();
+  pvRow = r;
+  const x = e.clientX, y = e.clientY;
+  pvTimer = setTimeout(() => {
+    const src = `/api/page-image/${encodeURIComponent(r.pdf_key)}?page=${r.page_no || 1}`;
+    if (pvImg.getAttribute("src") !== src) {
+      pvImg.hidden = true; pvMsg.hidden = false; pvMsg.textContent = "出品票を読み込み中…";
+      pvImg.onload = () => { if (pvRow === r) { pvImg.hidden = false; pvMsg.hidden = true; } };
+      pvImg.onerror = () => { pvMsg.textContent = "この出品票は画像で表示できません（クリックでPDFを開けます）"; };
+      pvImg.src = src;
+    }
+    placePreview(x, y);
+    pv.style.display = "block";
+  }, 250);
+});
+$("rows").addEventListener("mouseleave", hidePreview);
+document.querySelector(".scroll").addEventListener("scroll", hidePreview);
 
 load();
 watchProgress();
