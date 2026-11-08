@@ -1,3 +1,5 @@
 ANTHROPIC_API_KEY=sk-ant-...
 # 設定するとサイト全体にパスワードがかかります（ユーザー名は何でもOK）
 APP_PASSWORD=
+# claude / workers-ai / hybrid（ローカルの動作確認だけなら dummy：AIを呼ばずにテスト車両を登録）
+READER=claude

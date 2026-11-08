@@ -83,11 +83,12 @@
   </div>
   <button class="btn btn-main" id="btnSearch">検索</button>
   <button class="btn btn-sub" id="btnClear">条件クリア</button>
-  <label class="drop" id="dropAi">📄 出品票PDFをドロップ / クリック（AIで読み取り・複数可）
+  <label class="drop" id="dropAi">📄 出品票PDFをドロップ / クリック（AIで自動読み取り・複数可）
     <input type="file" id="inAi" accept="application/pdf" multiple hidden></label>
   <label class="drop" id="dropImp">📥 データ取り込み（TSV/CSV＋PDF）
     <input type="file" id="inImp" accept=".tsv,.csv,.txt,application/pdf" multiple hidden></label>
   <div id="log"></div>
+  <div id="progress" hidden style="font-size:12px;color:#fff;background:#2b4a85;padding:4px 8px;border-radius:4px"></div>
 </div>
 
 <div class="bar">
@@ -298,25 +299,49 @@ $("pdfClose").onclick = () => $("pdfDlg").close();
 $("pdfDlg").addEventListener("close", () => ($("pdfFrame").src = "about:blank"));
 $("pdfDlg").addEventListener("click", (e) => { if (e.target === $("pdfDlg")) $("pdfDlg").close(); });
 
-// ---------- アップロード（AI読み取り） ----------
+// ---------- アップロード（AI読み取り：ページごとに裏側で処理） ----------
 const log = (s) => ($("log").textContent = s);
 async function aiUpload(files) {
   const pdfs = [...files].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  let pages = 0;
   for (let i = 0; i < pdfs.length; i++) {
     const f = pdfs[i];
-    log(`読み取り中 (${i + 1}/${pdfs.length}) ${f.name} … 数十秒〜数分かかります`);
+    log(`送信中 (${i + 1}/${pdfs.length}) ${f.name}`);
     const fd = new FormData(); fd.append("file", f);
     try {
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.status);
-      log(`✅ ${f.name}: ${j.count}台を登録`);
+      pages += j.pages;
     } catch (e) {
       log(`❌ ${f.name}: ${e.message}`);
       await new Promise((r) => setTimeout(r, 2500));
     }
-    load();
   }
+  if (pages) log(`✅ ${pages}ページを読み取り待ちに入れました。画面を閉じても読み取りは続きます`);
+  watchProgress();
+}
+
+// 読み取りの進み具合を表示（読み取り中は5秒ごとに確認し、表も更新）
+let watching = null, lastDone = -1;
+async function watchProgress() {
+  clearTimeout(watching);
+  let data;
+  try { data = await (await fetch("/api/uploads")).json(); } catch { return; }
+  const ups = data.uploads || [];
+  const sum = (k) => ups.reduce((a, u) => a + (u[k] || 0), 0);
+  const pending = sum("pending"), done = sum("done"), failed = sum("failed");
+  const box = $("progress");
+  if (pending || failed) {
+    const active = ups.filter((u) => u.pending);
+    box.hidden = false;
+    box.innerHTML =
+      (pending ? `⏳ 読み取り中 ${active.reduce((a, u) => a + u.done + u.failed, 0)}/${active.reduce((a, u) => a + u.pages_total, 0)}ページ` : "") +
+      (failed ? ` <span title="${h(ups.map((u) => u.errors).filter(Boolean).join("\n"))}">⚠️ 失敗 ${failed}ページ</span> <button class="btn btn-sub" id="btnRetry" style="padding:2px 8px">失敗分を読み直す</button>` : "");
+    if (failed) $("btnRetry").onclick = async () => { await fetch("/api/uploads/retry", { method: "POST" }); watchProgress(); };
+  } else box.hidden = true;
+  if (done !== lastDone) { if (lastDone >= 0) load(); lastDone = done; }
+  if (pending) watching = setTimeout(watchProgress, 5000);
 }
 
 // ---------- 取り込み（TSV/CSV＋PDF） ----------
@@ -368,6 +393,7 @@ $("btnClear").onclick = () => { for (const k of FILTERS) $("f_" + k).value = "";
 document.querySelectorAll(".filters input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); }));
 
 load();
+watchProgress();
 </script>
 </body>
 </html>

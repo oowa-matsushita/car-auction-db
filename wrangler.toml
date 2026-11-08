@@ -2,6 +2,12 @@ name = "car-auction-db"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 compatibility_flags = ["nodejs_compat"]
+# ダッシュボードで設定した変数（READER など）がデプロイで消されないようにする
+keep_vars = true
+
+# 有料プラン：1回の処理で使えるCPU時間を延ばす（PDFのページ分割用）
+[limits]
+cpu_ms = 120000
 
 [assets]
 directory = "./public"
@@ -15,6 +21,21 @@ database_id = "019ec975-0d2e-4ac5-a707-73ff6b1e23d9"
 [[r2_buckets]]
 binding = "PDFS"
 bucket_name = "car-auction-pdfs"
+
+# PDFを1ページずつ裏側で読み取るための列
+[[queues.producers]]
+binding = "READ_QUEUE"
+queue = "car-auction-read"
+
+[[queues.consumers]]
+queue = "car-auction-read"
+max_batch_size = 5
+max_batch_timeout = 2
+max_retries = 3
+
+# Cloudflare の AI（READER = workers-ai / hybrid のとき使用）
+[ai]
+binding = "AI"
 
 [observability]
 enabled = true

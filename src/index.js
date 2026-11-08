@@ -1,4 +1,5 @@
-import Anthropic, { toFile } from "@anthropic-ai/sdk";
+import { splitPages } from "./pdf.js";
+import { readPage } from "./reader.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
 // DBの列名（id / created_at / updated_at 以外）
@@ -128,112 +129,6 @@ const cellOut = (v, sep) => {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-// ---- AIによるPDF読み取り --------------------------------------------------------
-const nullable = (type) => ({ type: [type, "null"] });
-const VEHICLE_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["vehicles"],
-  properties: {
-    vehicles: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          page_no: { type: "integer", description: "この車両が載っているPDFのページ番号（1始まり）" },
-          sheet_format: nullable("string"),
-          control_no: nullable("string"),
-          auction_house: { ...nullable("string"), description: "会場名 例: USS東京, TAA横浜, CAA中部" },
-          auction_date: { ...nullable("string"), description: "開催日 YYYY-MM-DD" },
-          auction_round: { ...nullable("string"), description: "開催回" },
-          lot_no: { ...nullable("string"), description: "出品番号" },
-          maker: nullable("string"),
-          car_name: nullable("string"),
-          grade: nullable("string"),
-          model_code: { ...nullable("string"), description: "型式 例: DBA-ZRR80W" },
-          year: { ...nullable("integer"), description: "年式（西暦）。R5→2023, H30→2018" },
-          first_reg_month: { ...nullable("integer"), description: "初度登録の月 1-12" },
-          displacement_cc: nullable("integer"),
-          fuel: nullable("string"),
-          shift: { ...nullable("string"), description: "FA, CA, AT, MT, F5 など表記のまま" },
-          mileage_km: { ...nullable("integer"), description: "走行距離をkmで。'45千km'なら45000" },
-          inspection: { ...nullable("string"), description: "車検 例: R07.05" },
-          color: nullable("string"),
-          color_code: nullable("string"),
-          score: { ...nullable("string"), description: "評価点 例: 4.5, R, RA" },
-          score_exterior: nullable("string"),
-          score_interior: nullable("string"),
-          equipment: { ...nullable("string"), description: "装備をスペース区切りで 例: AC PS PW SR AW" },
-          start_price_man: { ...nullable("number"), description: "スタート金額（万円）。千円単位表記なら万円に換算" },
-          bid_price_man: { ...nullable("number"), description: "落札金額（万円）" },
-          result: { ...nullable("string"), description: "落札/流札/商談 など" },
-          member_name: { ...nullable("string"), description: "印字されている会員名" },
-          handwritten_note: { ...nullable("string"), description: "手書きの書き込みをすべて文字起こし" },
-          inspector_note: { ...nullable("string"), description: "検査員記入欄・注意事項" },
-          needs_review: { type: "boolean", description: "読み取りに自信がない項目があれば true" },
-          review_reason: nullable("string"),
-        },
-        required: [
-          "page_no", "sheet_format", "control_no", "auction_house", "auction_date", "auction_round", "lot_no",
-          "maker", "car_name", "grade", "model_code", "year", "first_reg_month", "displacement_cc", "fuel",
-          "shift", "mileage_km", "inspection", "color", "color_code", "score", "score_exterior",
-          "score_interior", "equipment", "start_price_man", "bid_price_man", "result", "member_name",
-          "handwritten_note", "inspector_note", "needs_review", "review_reason",
-        ],
-      },
-    },
-  },
-};
-
-const EXTRACT_PROMPT = `添付PDFは日本の中古車オークションの出品票（オークションシート）や落札票です。
-PDFに載っているすべての車両を1台ずつ抽出し、指定のJSON形式で返してください。
-
-- 1ページに複数台載っている場合も、すべて別の車両として出力します。
-- page_no にはその車両が載っているページ番号（1始まり）を入れます。
-- 金額はすべて「万円」単位の数値にします（例: 125,000円 → 12.5、1250千円 → 125）。
-- 年式は西暦の整数に換算します（R05/令和5年 → 2023、H30 → 2018）。
-- 手書きの書き込み（金額・メモ・印など）は handwritten_note にできるだけそのまま書き起こします。
-- 読めない・存在しない項目は null にします。推測で埋めないでください。
-- 読み取りに自信がない項目がある車両は needs_review を true にし、review_reason に理由を書きます。`;
-
-async function extractVehicles(env, pdfBytes, filename) {
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-  // Files API にアップロード（Worker内でのbase64変換を避ける）。1日で自動削除。
-  const uploaded = await client.files.upload({
-    file: await toFile(pdfBytes, filename || "sheet.pdf", { type: "application/pdf" }),
-    expires_in_seconds: 86400,
-  });
-  try {
-    const stream = client.beta.messages.stream({
-      model: env.CLAUDE_MODEL || "claude-opus-5-5",
-      max_tokens: 64000,
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "high",
-        format: { type: "json_schema", schema: VEHICLE_SCHEMA },
-      },
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      messages: [{
-        role: "user",
-        content: [
-          { type: "document", source: { type: "file", file_id: uploaded.id } },
-          { type: "text", text: EXTRACT_PROMPT },
-        ],
-      }],
-    });
-    const msg = await stream.finalMessage();
-    if (msg.stop_reason === "refusal") throw new Error("AIがこのPDFの読み取りを拒否しました");
-    if (msg.stop_reason === "max_tokens") throw new Error("PDFが大きすぎて読み取りきれませんでした。ページを分割してください");
-    const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
-    const data = JSON.parse(text);
-    return data.vehicles || [];
-  } finally {
-    client.files.delete(uploaded.id).catch(() => {});
-  }
-}
-
 // ---- テーブル自動作成（初回アクセス時。D1コンソールでの作業は不要） ----
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS uploads ( id INTEGER PRIMARY KEY AUTOINCREMENT, pdf_key TEXT NOT NULL, filename TEXT, status TEXT, vehicle_count INTEGER, error TEXT, created_at TEXT DEFAULT (datetime('now','localtime')) )",
@@ -241,10 +136,19 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_vehicles_car ON vehicles(car_name)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_date ON vehicles(auction_date)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_buyer ON vehicles(buyer)",
+  "CREATE INDEX IF NOT EXISTS idx_vehicles_upload ON vehicles(upload_id, page_no)",
+  "CREATE TABLE IF NOT EXISTS upload_pages ( upload_id INTEGER NOT NULL, page_no INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', reader TEXT, vehicle_count INTEGER, error TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')), PRIMARY KEY (upload_id, page_no) )",
 ];
+// 既存のデータベースに後から足した列（すでにある場合のエラーは無視）
+const ADDED_COLUMNS = ["ALTER TABLE uploads ADD COLUMN pages_total INTEGER"];
 let schemaReady = null;
 function ensureSchema(db) {
-  if (!schemaReady) schemaReady = db.batch(SCHEMA.map((q) => db.prepare(q))).catch((e) => { schemaReady = null; throw e; });
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      await db.batch(SCHEMA.map((q) => db.prepare(q)));
+      for (const q of ADDED_COLUMNS) await db.prepare(q).run().catch(() => {});
+    })().catch((e) => { schemaReady = null; throw e; });
+  }
   return schemaReady;
 }
 
@@ -264,8 +168,54 @@ function checkAuth(request, env) {
   });
 }
 
+// ---- 読み取り待ちの列（Cloudflare Queues） ----------------------------------------
+const pageKey = (uploadId, pageNo) => `pages/${uploadId}/${pageNo}.pdf`;
+async function enqueue(env, jobs) {
+  for (let i = 0; i < jobs.length; i += 100) {
+    await env.READ_QUEUE.sendBatch(jobs.slice(i, i + 100).map((j) => ({ body: { upload_id: j.upload_id, page_no: j.page_no } })));
+  }
+}
+
+const MAX_ATTEMPTS = 3;
+async function processPage(env, msg) {
+  const { upload_id, page_no } = msg.body;
+  const setPage = (fields) => {
+    const cols = Object.keys(fields);
+    return env.DB.prepare(`UPDATE upload_pages SET ${cols.map((c) => c + " = ?").join(", ")}, updated_at = datetime('now','localtime') WHERE upload_id = ? AND page_no = ?`)
+      .bind(...Object.values(fields), upload_id, page_no).run();
+  };
+  try {
+    const up = await env.DB.prepare("SELECT pdf_key FROM uploads WHERE id = ?").bind(upload_id).first();
+    const obj = up && await env.PDFS.get(pageKey(upload_id, page_no));
+    if (!obj) { await setPage({ status: "error", error: "ページのファイルが見つかりません" }); return msg.ack(); }
+    await setPage({ status: "processing" });
+    const { reader, vehicles } = await readPage(env, new Uint8Array(await obj.arrayBuffer()));
+    // 読み直しの場合に二重登録しないよう、そのページの分を入れ替える
+    const stmts = [env.DB.prepare("DELETE FROM vehicles WHERE upload_id = ? AND page_no = ?").bind(upload_id, page_no)];
+    for (const v of vehicles) stmts.push(await insertVehicle(env.DB, { ...v, upload_id, page_no, pdf_key: up.pdf_key }));
+    await env.DB.batch(stmts);
+    await setPage({ status: "done", reader, vehicle_count: vehicles.length, error: null });
+    await env.PDFS.delete(pageKey(upload_id, page_no));
+    msg.ack();
+  } catch (e) {
+    console.error(`upload ${upload_id} p.${page_no}:`, e);
+    if (msg.attempts >= MAX_ATTEMPTS) {
+      await setPage({ status: "error", error: String(e.message || e).slice(0, 300) });
+      msg.ack();
+    } else {
+      await setPage({ status: "queued", error: String(e.message || e).slice(0, 300) });
+      msg.retry({ delaySeconds: 15 * msg.attempts });
+    }
+  }
+}
+
 // ---- ルーティング -------------------------------------------------------------
 export default {
+  async queue(batch, env) {
+    await ensureSchema(env.DB);
+    await Promise.all(batch.messages.map((m) => processPage(env, m)));
+  },
+
   async fetch(request, env) {
     const denied = checkAuth(request, env);
     if (denied) return denied;
@@ -305,27 +255,52 @@ export default {
         return json({ ok: true });
       }
 
-      // PDFアップロード → AIで読み取り → 登録
+      // PDFアップロード → ページごとに分けて読み取り待ちの列（Queue）に入れる
       if (path === "/api/upload" && method === "POST") {
-        if (!env.ANTHROPIC_API_KEY) return json({ error: "ANTHROPIC_API_KEY が設定されていません" }, 500);
         const form = await request.formData();
         const file = form.get("file");
         if (!file || typeof file === "string") return json({ error: "ファイルがありません" }, 400);
         const bytes = new Uint8Array(await file.arrayBuffer());
+        let pages;
+        try { pages = await splitPages(bytes); }
+        catch (e) { return json({ error: "PDFを開けませんでした（" + (e.message || e) + "）" }, 400); }
+        if (!pages.length) return json({ error: "ページがありません" }, 400);
         const key = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID().slice(0, 8)}_${file.name}`;
         await env.PDFS.put(key, bytes, { httpMetadata: { contentType: "application/pdf" } });
-        const up = await env.DB.prepare("INSERT INTO uploads (pdf_key, filename, status) VALUES (?, ?, 'processing') RETURNING id")
-          .bind(key, file.name).first();
-        try {
-          const vehicles = await extractVehicles(env, bytes, file.name);
-          const stmts = await Promise.all(vehicles.map((v) => insertVehicle(env.DB, { ...v, upload_id: up.id, pdf_key: key })));
-          if (stmts.length) await env.DB.batch(stmts);
-          await env.DB.prepare("UPDATE uploads SET status='done', vehicle_count=? WHERE id=?").bind(vehicles.length, up.id).run();
-          return json({ ok: true, count: vehicles.length, pdf_key: key });
-        } catch (e) {
-          await env.DB.prepare("UPDATE uploads SET status='error', error=? WHERE id=?").bind(String(e.message || e), up.id).run();
-          throw e;
+        const up = await env.DB.prepare("INSERT INTO uploads (pdf_key, filename, status, pages_total) VALUES (?, ?, 'processing', ?) RETURNING id")
+          .bind(key, file.name, pages.length).first();
+        await Promise.all(pages.map((p, i) => env.PDFS.put(pageKey(up.id, i + 1), p, { httpMetadata: { contentType: "application/pdf" } })));
+        await env.DB.batch(pages.map((_, i) => env.DB.prepare("INSERT INTO upload_pages (upload_id, page_no) VALUES (?, ?)").bind(up.id, i + 1)));
+        await enqueue(env, pages.map((_, i) => ({ upload_id: up.id, page_no: i + 1 })));
+        return json({ ok: true, upload_id: up.id, pages: pages.length });
+      }
+
+      // 読み取りの進み具合（直近のアップロード）
+      if (path === "/api/uploads" && method === "GET") {
+        const { results } = await env.DB.prepare(`
+          SELECT u.id, u.filename, u.created_at, u.pages_total,
+            SUM(p.status IN ('queued','processing')) AS pending,
+            SUM(p.status = 'done') AS done,
+            SUM(p.status = 'error') AS failed,
+            SUM(COALESCE(p.vehicle_count, 0)) AS vehicles,
+            SUM(p.reader = 'claude') AS by_claude,
+            SUM(p.reader = 'workers-ai') AS by_workers_ai,
+            MAX(p.updated_at) AS updated_at,
+            GROUP_CONCAT(CASE WHEN p.status = 'error' THEN 'p.' || p.page_no || ': ' || p.error END, ' / ') AS errors
+          FROM uploads u JOIN upload_pages p ON p.upload_id = u.id
+          WHERE u.created_at >= datetime('now','localtime','-3 days')
+          GROUP BY u.id ORDER BY u.id DESC LIMIT 50`).all();
+        return json({ uploads: results, reader: (env.READER || "claude").toLowerCase() });
+      }
+
+      // 失敗したページを読み直す
+      if (path === "/api/uploads/retry" && method === "POST") {
+        const { results } = await env.DB.prepare("SELECT upload_id, page_no FROM upload_pages WHERE status = 'error'").all();
+        if (results.length) {
+          await env.DB.prepare("UPDATE upload_pages SET status = 'queued', error = NULL, updated_at = datetime('now','localtime') WHERE status = 'error'").run();
+          await enqueue(env, results);
         }
+        return json({ ok: true, count: results.length });
       }
 
       // TSV/CSV 取り込み

@@ -6,7 +6,8 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.6.0"
+    "@anthropic-ai/sdk": "^1.6.0",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "wrangler": "^4.158.0"
