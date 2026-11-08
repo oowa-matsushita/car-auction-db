@@ -1,7 +1,7 @@
 import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
-import { TURNOVER_SCHEMA, handleTurnover } from "./turnover.js";
+import { TURNOVER_SCHEMA, TURNOVER_ADDED_COLUMNS, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
 // DBの列名（id / created_at / updated_at 以外）
@@ -143,7 +143,7 @@ function ensureSchema(db) {
   if (!schemaReady) {
     schemaReady = (async () => {
       await db.batch([...SCHEMA, ...TURNOVER_SCHEMA].map((q) => db.prepare(q)));
-      for (const q of ADDED_COLUMNS) await db.prepare(q).run().catch(() => {});
+      for (const q of [...ADDED_COLUMNS, ...TURNOVER_ADDED_COLUMNS]) await db.prepare(q).run().catch(() => {});
     })().catch((e) => { schemaReady = null; throw e; });
   }
   return schemaReady;

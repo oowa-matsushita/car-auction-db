@@ -136,7 +136,7 @@ async function importInventory(files) {
 }
 dropZone($("dropInv"), $("inInv"), importInventory);
 
-// ---------- 回転率の推移グラフ（棒：その車、点線：全体） ----------
+// ---------- 回転率の推移グラフ（折れ線：その車＝実線、全体＝点線） ----------
 let tvHistory = null;
 async function loadHistory() {
   try { tvHistory = await (await fetch("/api/turnover/history")).json(); } catch { tvHistory = null; }
@@ -163,21 +163,30 @@ function rateChartSvg(points, { w, h, big }) {
   }
   points.forEach((p, i) => {
     g += `<text x="${cx(i)}" y="${h - 6}" text-anchor="middle" font-size="10" fill="${INK2}">${shortMonth(p.month, i === 0)}</text>`;
-    if (p.rate == null || p.rate <= 0) return;
-    const x0 = cx(i) - bw / 2, y0 = y(p.rate), yb = y(0), r = Math.min(4, (yb - y0) / 2);
-    g += `<path d="M${x0},${yb} V${y0 + r} Q${x0},${y0} ${x0 + r},${y0} H${x0 + bw - r} Q${x0 + bw},${y0} ${x0 + bw},${y0 + r} V${yb} Z" fill="${BAR}"/>`;
   });
-  // 全体の回転率（点線）
-  const avg = points.map((p, i) => (p.all == null ? null : [cx(i), y(p.all)])).filter(Boolean);
-  if (avg.length === 1) avg.unshift([avg[0][0] - band / 2, avg[0][1]]), avg.push([avg[1][0] + band / 2, avg[1][1]]);
-  if (avg.length) {
-    g += `<polyline points="${avg.map((q) => q.join(",")).join(" ")}" fill="none" stroke="${AVG}" stroke-width="2" stroke-dasharray="5 4"/>`;
-    const last = avg[avg.length - 1];
-    g += `<text x="${last[0] + 5}" y="${last[1] + 4}" font-size="10" fill="${INK2}">全体</text>`;
-  }
+  // 折れ線（値がある月だけつなぐ）＋ 点。右端に名前を直接書く
+  const line = (key, color, dash, label, labelDy) => {
+    const pts = points.map((p, i) => (p[key] == null ? null : [cx(i), y(p[key])]));
+    const segs = [];
+    let cur = [];
+    for (const q of pts) { if (q) cur.push(q); else if (cur.length) { segs.push(cur); cur = []; } }
+    if (cur.length) segs.push(cur);
+    for (const sg of segs) {
+      if (sg.length > 1) g += `<polyline points="${sg.map((q) => q.join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2" ${dash ? 'stroke-dasharray="5 4"' : ""} stroke-linejoin="round"/>`;
+    }
+    pts.forEach((q) => { if (q) g += `<circle cx="${q[0]}" cy="${q[1]}" r="${big ? 4.5 : 4}" fill="${dash ? "#fff" : color}" stroke="${color}" stroke-width="2"/>`; });
+    const last = [...pts].reverse().find(Boolean);
+    if (last) g += `<text x="${last[0] + 8}" y="${last[1] + 4 + labelDy}" font-size="10" fill="${INK2}">${label}</text>`;
+    return last;
+  };
+  // 名前が重ならないよう、下にある線の名前を少し下げる
+  const lp0 = [...points].reverse().find((p) => p.rate != null), la0 = [...points].reverse().find((p) => p.all != null);
+  const carBelow = lp0 && la0 && lp0.rate < la0.all, close = lp0 && la0 && Math.abs(y(lp0.rate) - y(la0.all)) < 12;
+  line("all", AVG, true, "全体", close && !carBelow ? 8 : 0);
+  line("rate", BAR, false, "この車", close && carBelow ? 8 : 0);
   // 最新の月だけ数字を出す
   const li = points.length - 1, lp = points[li];
-  if (lp && lp.rate != null) g += `<text x="${cx(li)}" y="${y(lp.rate) - 5}" text-anchor="middle" font-size="11" font-weight="700" fill="${INK}">${(lp.rate * 100).toFixed(1)}%</text>`;
+  if (lp && lp.rate != null) g += `<text x="${cx(li)}" y="${y(lp.rate) - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="${INK}">${(lp.rate * 100).toFixed(1)}%</text>`;
   // マウス用の当たり判定（棒より広く）
   if (big) points.forEach((p, i) => { g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${ih}" fill="transparent"/>`; });
   return `<svg class="tv-chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">${g}</svg>`;
@@ -222,7 +231,7 @@ function showChart(key) {
   $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率の推移`;
   const w = Math.min(820, $("tvChartBody").clientWidth || 820);
   $("tvChartBody").innerHTML = rateChartSvg(pts, { w, h: 280, big: true }) +
-    `<div class="tv-note" style="margin-top:2px"><span style="display:inline-block;width:12px;height:10px;background:${BAR};border-radius:3px 3px 0 0;vertical-align:middle"></span> ${h(tvHistory.models[key].name)}
+    `<div class="tv-note" style="margin-top:2px"><span style="display:inline-block;width:18px;border-top:2px solid ${BAR};vertical-align:middle"></span> ${h(tvHistory.models[key].name)}
      <span style="display:inline-block;width:18px;border-top:2px dashed ${AVG};vertical-align:middle;margin-left:12px"></span> 全体</div>`;
   $("tvChartTable").innerHTML = `<table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>全体</th></tr></thead><tbody>` +
     pts.map((p) => `<tr><td>${monthLabel(p.month)}</td><td class="n">${p.opening}台</td><td class="n">${p.sold}台</td><td class="n">${pct(p.rate)}</td><td class="n">${pct(p.all)}</td></tr>`).join("") + "</tbody></table>";
@@ -238,6 +247,27 @@ function showChart(key) {
   svg.addEventListener("mouseleave", () => (tip.style.display = "none"));
   $("tvChartCard").hidden = false;
   $("tvChartCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  showCarSold(key);
+}
+
+// その車の、選んでいる月に売れた車の一覧
+async function showCarSold(key) {
+  const month = tvMonth;
+  $("tvCarSoldTitle").textContent = `${monthLabel(month)}に売れた ${tvHistory.models[key]?.name || ""}`;
+  $("tvCarSoldRows").innerHTML = '<tr><td colspan="7" class="tv-dim">読み込み中…</td></tr>';
+  const res = await fetch(`/api/turnover/${month}/model-sales?key=${encodeURIComponent(key)}`);
+  const j = await res.json();
+  if (!res.ok) { $("tvCarSoldRows").innerHTML = `<tr><td colspan="7">${h(j.error || "読み込みに失敗しました")}</td></tr>`; return; }
+  $("tvCarSoldTitle").textContent += `：${j.rows.length}台`;
+  $("tvCarSoldNote").textContent = j.rows.length && !j.linkable
+    ? "※ 販売データに「在庫No」か「車台番号」の列が無いため、年式・距離・色・グレードは出せません。在庫No入りの販売データCSVを入れ直すと表示されます。"
+    : "年式・距離・色は月初在庫から、グレードは仕入れ台帳（車台番号が一致する車）から表示します。";
+  const dash = '<span class="tv-dim">—</span>';
+  $("tvCarSoldRows").innerHTML = j.rows.map((r) => `<tr>
+    <td>${h(r.contract_date)}</td><td>${h(r.car_name)}</td><td>${r.year ? h(r.year) : dash}</td>
+    <td class="n">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString() + "km"}</td>
+    <td>${r.color ? h(r.color) : dash}</td><td>${r.grade ? h(r.grade) : dash}</td>
+    <td class="n">${r.price == null ? dash : yen(r.price)}</td></tr>`).join("") || '<tr><td colspan="7" class="tv-dim">この月に売れた車はありません</td></tr>';
 }
 $("tvModelRows").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-key]");

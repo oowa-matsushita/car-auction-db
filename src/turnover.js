@@ -4,12 +4,18 @@ import { json, parseDelimited } from "./util.js";
 // 回転率 = その月の販売台数 ÷ 月初在庫
 // 販売台数は販売データCSV（契約日付の月で数える）の台数
 
+// 後から足した列（すでにある場合のエラーは無視される）
+export const TURNOVER_ADDED_COLUMNS = [
+  "ALTER TABLE sales_items ADD COLUMN stock_no TEXT",
+  "ALTER TABLE sales_items ADD COLUMN chassis_no TEXT",
+];
+
 export const TURNOVER_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS inv_months ( month TEXT PRIMARY KEY, filename TEXT, item_count INTEGER, uploaded_at TEXT DEFAULT (datetime('now','localtime')) )",
   "CREATE TABLE IF NOT EXISTS inv_items ( month TEXT NOT NULL, stock_no TEXT, maker TEXT, car_name TEXT, first_reg TEXT, inspection_expiry TEXT, color TEXT, mileage_km INTEGER, model_code TEXT, chassis_no TEXT, planned_price INTEGER, cost INTEGER, staff TEXT )",
   "CREATE INDEX IF NOT EXISTS idx_inv_items_stock ON inv_items(month, stock_no)",
   "CREATE INDEX IF NOT EXISTS idx_inv_items_chassis ON inv_items(month, chassis_no)",
-  "CREATE TABLE IF NOT EXISTS sales_items ( month TEXT NOT NULL, slip_no TEXT, contract_date TEXT, delivery_date TEXT, car_name TEXT, price INTEGER, discount INTEGER, sales_amount INTEGER, filename TEXT )",
+  "CREATE TABLE IF NOT EXISTS sales_items ( month TEXT NOT NULL, slip_no TEXT, contract_date TEXT, delivery_date TEXT, car_name TEXT, price INTEGER, discount INTEGER, sales_amount INTEGER, filename TEXT, stock_no TEXT, chassis_no TEXT )",
   "CREATE INDEX IF NOT EXISTS idx_sales_items_month ON sales_items(month)",
 ];
 
@@ -48,23 +54,46 @@ const toInt = (x) => {
   return String(x ?? "").trim() === "" || !Number.isFinite(n) ? null : Math.round(n);
 };
 
-// 販売データCSV（1台が3行：1行目 伝票No・契約日付・車名・車両本体価格 / 2行目 納車日・値引 / 3行目 売上高）
+// 販売データCSV（1台が複数行。見出しも同じ行数）。例：
+//   見出し1行目: 伝票No, 契約日付, 車名, 車両本体価格, …
+//   見出し2行目:       , 納車日,     , 車両本体値引, …
+//   見出し3行目:       ,       ,     , 売上高, …
+// 見出しの「何行目の何列目か」を覚えて、各車の同じ位置から値を取る。
+// 在庫No・車台番号の列があれば、月初在庫や仕入れ台帳とつなぐのに使う。
+const SALES_FIELDS = {
+  slip_no: ["伝票No", "伝票NO", "伝票番号"],
+  contract_date: ["契約日付", "契約日"],
+  delivery_date: ["納車日", "納車日付"],
+  car_name: ["車名"],
+  price: ["車両本体価格", "本体価格"],
+  discount: ["車両本体値引", "値引"],
+  sales_amount: ["売上高"],
+  stock_no: ["在庫No", "在庫NO", "在庫番号"],
+  chassis_no: ["車台番号"],
+};
 function parseSales(rows) {
-  const head = rows[0].map(clean);
-  const col = (name) => head.indexOf(name);
-  const iNo = col("伝票No"), iDate = col("契約日付"), iCar = col("車名"), iPrice = col("車両本体価格");
+  const iNo = rows[0].map(clean).findIndex((h) => SALES_FIELDS.slip_no.includes(h));
+  const iDate = rows[0].map(clean).findIndex((h) => SALES_FIELDS.contract_date.includes(h));
+  const isStart = (r) => clean(r[iNo]) && toDate(r[iDate]);
+  let hdrN = rows.findIndex((r, i) => i > 0 && isStart(r));
+  if (hdrN < 1) return [];
+  const pos = {};
+  for (let ri = 0; ri < hdrN; ri++) {
+    rows[ri].forEach((h, ci) => {
+      h = clean(h);
+      for (const [f, names] of Object.entries(SALES_FIELDS)) if (!pos[f] && names.includes(h)) pos[f] = [ri, ci];
+    });
+  }
   const recs = [];
-  let cur = null, line = 0;
-  for (const r of rows.slice(1)) {
-    const no = clean(r[iNo]), date = toDate(r[iDate]);
-    if (no && date) {
-      cur = { slip_no: no, contract_date: date, delivery_date: null, car_name: clean(r[iCar]), price: toInt(r[iPrice]), discount: null, sales_amount: null };
-      recs.push(cur); line = 1;
-    } else if (cur) {
-      line++;
-      if (line === 2) { cur.delivery_date = toDate(r[iDate]); cur.discount = toInt(r[iPrice]); }
-      if (line === 3) cur.sales_amount = toInt(r[iPrice]);
-    }
+  for (let i = hdrN; i < rows.length; i++) {
+    if (!isStart(rows[i])) continue;
+    const block = rows.slice(i, i + hdrN);
+    const get = (f) => (pos[f] && block[pos[f][0]] ? block[pos[f][0]][pos[f][1]] : "");
+    recs.push({
+      slip_no: clean(get("slip_no")), contract_date: toDate(get("contract_date")), delivery_date: toDate(get("delivery_date")),
+      car_name: clean(get("car_name")), price: toInt(get("price")), discount: toInt(get("discount")), sales_amount: toInt(get("sales_amount")),
+      stock_no: clean(get("stock_no")), chassis_no: clean(get("chassis_no")),
+    });
   }
   return recs;
 }
@@ -159,12 +188,13 @@ export async function handleTurnover(request, env, url) {
       for (const [mo, list] of Object.entries(byMonth)) {
         stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ?").bind(mo));
         for (const r of list) {
-          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename) VALUES (?,?,?,?,?,?,?,?,?)")
-            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename));
+          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no));
         }
       }
       for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));
-      return json({ ok: true, kind: "sales", months: Object.fromEntries(Object.entries(byMonth).map(([k, v]) => [k, v.length])), count: recs.length });
+      const linked = recs.filter((r) => r.stock_no || r.chassis_no).length;
+      return json({ ok: true, kind: "sales", linked, months: Object.fromEntries(Object.entries(byMonth).map(([k, v]) => [k, v.length])), count: recs.length });
     }
 
     if (!MONTH_RE.test(month)) return json({ error: "何月の在庫か分かりません。ファイル名に年月（例: 202610）を入れるか、「月」を選んでください" }, 400);
@@ -222,6 +252,35 @@ export async function handleTurnover(request, env, url) {
       }
     }
     return json(out);
+  }
+
+  // ある車種の、その月に売れた車（年式・距離・色・グレードは月初在庫と仕入れ台帳から）
+  const ms = path.match(/^\/api\/turnover\/(\d{4}-\d{2})\/model-sales$/);
+  if (ms && method === "GET") {
+    const month = ms[1], key = url.searchParams.get("key") || "";
+    const { results } = await db.prepare("SELECT * FROM sales_items WHERE month = ? ORDER BY contract_date, slip_no").bind(month).all();
+    const list = results.filter((r) => modelKey(r.car_name) === key);
+    const out = [];
+    for (const r of list) {
+      let inv = null;
+      if (r.stock_no) inv = await db.prepare("SELECT * FROM inv_items WHERE stock_no = ? ORDER BY month DESC LIMIT 1").bind(r.stock_no).first();
+      if (!inv && r.chassis_no) inv = await db.prepare("SELECT * FROM inv_items WHERE chassis_no = ? ORDER BY month DESC LIMIT 1").bind(r.chassis_no).first();
+      const chassis = r.chassis_no || inv?.chassis_no || "";
+      let veh = null;
+      const n = chassis.toUpperCase().replace(/[-－‐\s　]/g, "");
+      if (n.length >= 5) {
+        veh = await db.prepare("SELECT grade, year, mileage_km, color FROM vehicles WHERE REPLACE(REPLACE(UPPER(chassis_no),'-',''),' ','') = ? ORDER BY id DESC LIMIT 1").bind(n).first().catch(() => null);
+      }
+      out.push({
+        contract_date: r.contract_date, car_name: (r.car_name || "").split(/[▼■●★☆◇◆※□△▲]/)[0].trim() || inv?.car_name || "",
+        year: inv?.first_reg || (veh?.year ? String(veh.year) : ""),
+        mileage_km: inv?.mileage_km ?? veh?.mileage_km ?? null,
+        color: inv?.color || veh?.color || "",
+        grade: veh?.grade || "",
+        price: r.price, linked: !!inv,
+      });
+    }
+    return json({ month, rows: out, linkable: list.some((r) => r.stock_no || r.chassis_no) });
   }
 
   // その月の販売データ一覧
