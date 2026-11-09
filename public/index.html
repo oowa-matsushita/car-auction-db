@@ -19,7 +19,12 @@
   .top h1 { margin: 0 8px 0 0; font-size: 17px; letter-spacing: .05em; }
   .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--navy-2); padding: 6px 8px; border-radius: 4px; }
   .filters span { font-size: 11px; color: #c9e6ee; }
-  .w-s { width: 80px; } .w-m { width: 130px; } .w-d { width: 132px; }
+  .w-s { width: 80px; }
+  .dategrp { display: inline-flex; flex-direction: column; gap: 3px; }
+  .period { display: flex; gap: 3px; }
+  .period button { flex: 1; border: 1px solid #7f93bd; background: #2f4677; color: #dfe8ff; border-radius: 4px; padding: 1px 0; font-size: 11px; cursor: pointer; }
+  .period button:hover { background: #3c5891; }
+  .period button.on { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 700; } .w-m { width: 130px; } .w-d { width: 132px; }
   .btn { border: 0; border-radius: 4px; padding: 6px 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; }
   .btn-main { background: var(--orange); color: #fff; font-size: 15px; padding: 8px 22px; }
   .btn-sub { background: #dfe3ec; color: #172033; }
@@ -137,13 +142,19 @@
     <span>キーワード</span><input id="f_q" class="w-m" placeholder="車名・型式・車台番号">
     <span>会場</span><input id="f_auction_house" class="w-s" placeholder="USS東京 等">
     <span>年式</span><select id="f_year_from"></select>〜<select id="f_year_to"></select>
-    <span>開催日</span><input type="date" id="f_date_from" class="w-d">〜<input type="date" id="f_date_to" class="w-d">
+    <span>開催日</span>
+    <span class="dategrp">
+      <span><input type="date" id="f_date_from" class="w-d">〜<input type="date" id="f_date_to" class="w-d"></span>
+      <span class="period" id="period">
+        <button type="button" data-months="1">1か月</button><button type="button" data-months="3">3か月</button><button type="button" data-months="6">6か月</button>
+      </span>
+    </span>
   </div>
   <button class="btn btn-main" id="btnSearch">検索</button>
   <button class="btn btn-sub" id="btnClear">条件クリア</button>
-  <label class="drop" id="dropAi">📄 出品票PDFをドロップ / クリック（AIで自動読み取り・複数可）
+  <label class="drop" id="dropAi" style="display:none">📄 出品票PDFをドロップ / クリック（AIで自動読み取り・複数可）
     <input type="file" id="inAi" accept="application/pdf" multiple hidden></label>
-  <label class="drop" id="dropImp">📥 データ取り込み（TSV/CSV＋PDF）
+  <label class="drop" id="dropImp" style="display:none">📥 データ取り込み（TSV/CSV＋PDF）
     <input type="file" id="inImp" accept=".tsv,.csv,.txt,application/pdf" multiple hidden></label>
   <div id="log"></div>
   <div id="progress" hidden style="position:relative;font-size:12px;color:#fff;background:#2b4a85;padding:4px 8px;border-radius:4px;white-space:nowrap"></div>
@@ -608,10 +619,26 @@ const wareki = (y) => y >= 2019 ? "R" + String(y - 2018).padStart(2, "0") : y >=
 })();
 $("f_year_from").onchange = $("f_year_to").onchange = load;
 $("btnSearch").onclick = load;
-$("btnClear").onclick = () => { for (const k of FILTERS) $("f_" + k).value = ""; state.sort = ""; state.dir = "desc"; load(); };
+$("btnClear").onclick = () => { markPeriod(0); for (const k of FILTERS) $("f_" + k).value = ""; state.sort = ""; state.dir = "desc"; load(); };
 document.querySelectorAll(".filters input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); }));
 
 
+
+// ---------- 開催日：1か月・3か月・6か月 ----------
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function markPeriod(n) { document.querySelectorAll("#period button").forEach((b) => b.classList.toggle("on", Number(b.dataset.months) === n)); }
+$("period").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-months]");
+  if (!b) return;
+  const n = Number(b.dataset.months);
+  if (b.classList.contains("on")) { $("f_date_from").value = ""; $("f_date_to").value = ""; markPeriod(0); return load(); } // もう一度押すと解除
+  const d = new Date(); d.setMonth(d.getMonth() - n);
+  $("f_date_from").value = ymd(d);
+  $("f_date_to").value = ymd(new Date());
+  markPeriod(n);
+  load();
+});
+["f_date_from", "f_date_to"].forEach((id) => $(id).addEventListener("input", () => markPeriod(0)));
 
 load();
 watchProgress();
