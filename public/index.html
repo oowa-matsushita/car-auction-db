@@ -535,13 +535,14 @@ async function watchProgress() {
   try { data = await (await fetch("/api/uploads")).json(); } catch { return; }
   const ups = data.uploads || [];
   const sum = (k) => ups.reduce((a, u) => a + (u[k] || 0), 0);
-  const pending = sum("pending"), done = sum("done"), failed = sum("failed");
+  const pending = sum("pending"), done = sum("done"), failed = sum("failed"), waiting = sum("waiting");
   const box = $("progress");
-  if (pending || failed) {
+  if (pending || failed || waiting) {
     const active = ups.filter((u) => u.pending);
     box.hidden = false;
     box.innerHTML =
-      (pending ? `⏳ 読み取り中 ${active.reduce((a, u) => a + u.done + u.failed, 0)}/${active.reduce((a, u) => a + u.pages_total, 0)}ページ` : "") +
+      (pending ? `⏳ 読み取り中 ${active.reduce((a, u) => a + u.done + u.failed, 0)}/${active.reduce((a, u) => a + u.pages_total, 0)}ページ ` : "") +
+      (waiting ? `<span title="Cloudflare AI の無料枠を超えないよう、1日 ${data.daily_limit || ""}ページまで読み取っています">🕒 明日以降に読み取り ${waiting}ページ（毎日0時過ぎに自動）</span> ` : "") +
       (failed ? ` <span id="errToggle" class="err-toggle" title="押すと失敗の理由を表示">⚠️ 失敗 ${failed}ページ（${errOpen ? "理由を閉じる ▲" : "理由を見る ▼"}）</span>
         <button class="btn btn-sub" id="btnRetry" style="padding:2px 8px">失敗分を読み直す</button>
         <button class="btn btn-sub" id="btnDiscard" style="padding:2px 8px">失敗分を取り消す</button>

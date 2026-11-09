@@ -33,6 +33,10 @@ max_batch_size = 5
 max_batch_timeout = 2
 max_retries = 3
 
+# 毎日 0:05（日本時間）に、無料枠の都合で待たせていたページを読み取りに回す
+[triggers]
+crons = ["5 15 * * *"]
+
 # Cloudflare の AI（READER = workers-ai / hybrid のとき使用）
 [ai]
 binding = "AI"

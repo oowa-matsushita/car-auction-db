@@ -131,6 +131,7 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_vehicles_buyer ON vehicles(buyer)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_upload ON vehicles(upload_id, page_no)",
   "CREATE TABLE IF NOT EXISTS page_rotations ( rot_key TEXT NOT NULL, rot_page INTEGER NOT NULL, rotation INTEGER NOT NULL DEFAULT 0, source TEXT, PRIMARY KEY (rot_key, rot_page) )",
+  "CREATE TABLE IF NOT EXISTS ai_usage ( day TEXT PRIMARY KEY, pages INTEGER NOT NULL DEFAULT 0 )",
   "CREATE TABLE IF NOT EXISTS upload_pages ( upload_id INTEGER NOT NULL, page_no INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', reader TEXT, vehicle_count INTEGER, error TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')), PRIMARY KEY (upload_id, page_no) )",
 ];
 // 既存のデータベースに後から足した列（すでにある場合のエラーは無視）
@@ -194,6 +195,27 @@ function japaneseError(e) {
 }
 
 const MAX_ATTEMPTS = 3;
+
+// ---- Workers AI の無料枠を超えないための 1日の上限 ----------------------------------
+// 1日に読み取るページ数を WORKERS_AI_DAILY_PAGES（既定 40）までにし、超えた分は翌日 0:05 に回す
+const usesWorkersAI = (env) => ["workers-ai", "hybrid"].includes((env.READER || "claude").toLowerCase());
+const dailyLimit = (env) => Math.max(1, Number(env.WORKERS_AI_DAILY_PAGES) || 40);
+const todayJST = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+async function takeDailySlot(env) {
+  const day = todayJST();
+  await env.DB.prepare("INSERT INTO ai_usage (day, pages) VALUES (?, 0) ON CONFLICT(day) DO NOTHING").bind(day).run();
+  const r = await env.DB.prepare("UPDATE ai_usage SET pages = pages + 1 WHERE day = ? AND pages < ?").bind(day, dailyLimit(env)).run();
+  return (r.meta?.changes || 0) > 0;
+}
+// 待たせていたページを、その日の上限まで読み取りに回す（毎日 0:05 に実行）
+async function releaseWaiting(env) {
+  const { results } = await env.DB.prepare("SELECT upload_id, page_no FROM upload_pages WHERE status = 'waiting' ORDER BY upload_id, page_no LIMIT ?")
+    .bind(dailyLimit(env)).all();
+  if (!results.length) return 0;
+  await env.DB.batch(results.map((r) => env.DB.prepare("UPDATE upload_pages SET status = 'queued', error = NULL, updated_at = datetime('now','localtime') WHERE upload_id = ? AND page_no = ?").bind(r.upload_id, r.page_no)));
+  await enqueue(env, results);
+  return results.length;
+}
 async function processPage(env, msg) {
   const { upload_id, page_no } = msg.body;
   const setPage = (fields) => {
@@ -205,6 +227,10 @@ async function processPage(env, msg) {
     const up = await env.DB.prepare("SELECT pdf_key FROM uploads WHERE id = ?").bind(upload_id).first();
     const obj = up && await env.PDFS.get(pageKey(upload_id, page_no));
     if (!obj) { await setPage({ status: "error", error: "ページのファイルが見つかりません" }); return msg.ack(); }
+    if (usesWorkersAI(env) && !(await takeDailySlot(env))) {
+      await setPage({ status: "waiting", error: `今日の無料枠（${dailyLimit(env)}ページ）を使い切ったため、夜0時過ぎに自動で読み取ります` });
+      return msg.ack();
+    }
     await setPage({ status: "processing" });
     const { reader, vehicles } = await readPage(env, new Uint8Array(await obj.arrayBuffer()));
     // 読み直しの場合に二重登録しないよう、そのページの分を入れ替える
@@ -237,6 +263,11 @@ async function processPage(env, msg) {
 
 // ---- ルーティング -------------------------------------------------------------
 export default {
+  async scheduled(event, env) {
+    await ensureSchema(env.DB);
+    await releaseWaiting(env);
+  },
+
   async queue(batch, env) {
     await ensureSchema(env.DB);
     await Promise.all(batch.messages.map((m) => processPage(env, m)));
@@ -314,6 +345,7 @@ export default {
         const { results } = await env.DB.prepare(`
           SELECT u.id, u.filename, u.created_at, u.pages_total,
             SUM(p.status IN ('queued','processing')) AS pending,
+            SUM(p.status = 'waiting') AS waiting,
             SUM(p.status = 'done') AS done,
             SUM(p.status = 'error') AS failed,
             SUM(COALESCE(p.vehicle_count, 0)) AS vehicles,
@@ -323,9 +355,10 @@ export default {
             MAX(p.updated_at) AS updated_at,
             GROUP_CONCAT(DISTINCT CASE WHEN p.status = 'error' THEN p.error END) AS errors
           FROM uploads u JOIN upload_pages p ON p.upload_id = u.id
-          WHERE u.created_at >= datetime('now','localtime','-3 days')
+          WHERE u.created_at >= datetime('now','localtime','-3 days') OR EXISTS (SELECT 1 FROM upload_pages w WHERE w.upload_id = u.id AND w.status IN ('waiting','queued','processing','error'))
           GROUP BY u.id ORDER BY u.id DESC LIMIT 50`).all();
-        return json({ uploads: results, reader: (env.READER || "claude").toLowerCase() });
+        const used = usesWorkersAI(env) ? await env.DB.prepare("SELECT pages FROM ai_usage WHERE day = ?").bind(todayJST()).first("pages") : null;
+        return json({ uploads: results, reader: (env.READER || "claude").toLowerCase(), daily_limit: usesWorkersAI(env) ? dailyLimit(env) : null, used_today: used || 0 });
       }
 
       // 失敗したページを取り消す（同じPDFを何度も入れてしまったときなど）

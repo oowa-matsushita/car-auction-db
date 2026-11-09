@@ -144,7 +144,14 @@ const looksDoubtful = (vs) =>
 export async function readPage(env, pageBytes) {
   const mode = (env.READER || "claude").toLowerCase();
   if (mode === "dummy") return { reader: "dummy", vehicles: [{ car_name: "テスト車両", grade: "dummy", start_price_man: 10, needs_review: true, review_reason: "テスト用の読み取り" }] };
-  if (mode === "workers-ai") return { reader: "workers-ai", vehicles: await readWithWorkersAI(env, pageBytes) };
+  if (mode === "workers-ai") {
+    // Claude には回さない（追加料金をかけない）。自信がなさそうなものは「要確認」にする
+    const vehicles = await readWithWorkersAI(env, pageBytes);
+    if (looksDoubtful(vehicles)) {
+      for (const v of vehicles) if (!v.needs_review) { v.needs_review = true; v.review_reason = v.review_reason || "Cloudflare AI の読み取りのため、内容を確認してください"; }
+    }
+    return { reader: "workers-ai", vehicles };
+  }
   if (mode === "hybrid") {
     try {
       const vehicles = await readWithWorkersAI(env, pageBytes);
