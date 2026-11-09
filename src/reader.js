@@ -40,6 +40,7 @@ const VEHICLE_PROPS = {
   inspector_note: field("string", "検査員記入欄・注意事項"),
   needs_review: { type: "boolean", description: "読み取りに自信がない項目があれば true" },
   review_reason: field("string"),
+  page_rotation: field("string", "このページの画像を、文字が正しく読める向きにするために必要な時計回りの回転角度。\"0\"・\"90\"・\"180\"・\"270\" のどれか（横向きに置かれた縦長の用紙なら 90 か 270）"),
 };
 export const VEHICLE_SCHEMA = {
   type: "object",

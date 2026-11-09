@@ -6,7 +6,6 @@ function showTab(name) {
   for (const t of TABS) document.getElementById("tab-" + t).hidden = t !== name;
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
-  hidePreview();
   if (name === "turnover") loadTurnover();
 }
 document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));

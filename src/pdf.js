@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, PDFRawStream, PDFDict } from "pdf-lib";
+import { PDFDocument, PDFName, PDFRawStream, PDFDict, degrees } from "pdf-lib";
 
 // PDF を 1 ページずつの PDF に分ける
 export async function splitPages(bytes) {
@@ -13,12 +13,13 @@ export async function splitPages(bytes) {
   return pages;
 }
 
-// PDF から 1 ページだけを取り出した PDF を作る（pageIndex は 0 始まり）
-export async function extractOnePage(bytes, pageIndex) {
+// PDF から 1 ページだけを取り出した PDF を作る（pageIndex は 0 始まり）。rotation は時計回りに足す角度
+export async function extractOnePage(bytes, pageIndex, rotation = 0) {
   const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
   if (pageIndex < 0 || pageIndex >= src.getPageCount()) return null;
   const doc = await PDFDocument.create();
   const [page] = await doc.copyPages(src, [pageIndex]);
+  if (rotation) page.setRotation(degrees((page.getRotation().angle + rotation) % 360));
   doc.addPage(page);
   return doc.save();
 }

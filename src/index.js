@@ -130,6 +130,7 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_vehicles_date ON vehicles(auction_date)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_buyer ON vehicles(buyer)",
   "CREATE INDEX IF NOT EXISTS idx_vehicles_upload ON vehicles(upload_id, page_no)",
+  "CREATE TABLE IF NOT EXISTS page_rotations ( rot_key TEXT NOT NULL, rot_page INTEGER NOT NULL, rotation INTEGER NOT NULL DEFAULT 0, source TEXT, PRIMARY KEY (rot_key, rot_page) )",
   "CREATE TABLE IF NOT EXISTS upload_pages ( upload_id INTEGER NOT NULL, page_no INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', reader TEXT, vehicle_count INTEGER, error TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')), PRIMARY KEY (upload_id, page_no) )",
 ];
 // 既存のデータベースに後から足した列（すでにある場合のエラーは無視）
@@ -212,6 +213,12 @@ async function processPage(env, msg) {
     const res = await env.DB.batch(stmts);
     const added = insertedCount(res.slice(1));
     await setPage({ status: "done", reader, vehicle_count: added, skipped: vehicles.length - added, error: null });
+    // AI が判定したページの向きを保存（手で直した向きがあればそちらを優先して上書きしない）
+    const rot = Number(String(vehicles.find((v) => v.page_rotation)?.page_rotation || "").replace(/[^\d]/g, ""));
+    if ([90, 180, 270].includes(rot)) {
+      await env.DB.prepare("INSERT INTO page_rotations (rot_key, rot_page, rotation, source) VALUES (?, ?, ?, 'ai') ON CONFLICT(rot_key, rot_page) DO NOTHING")
+        .bind(up.pdf_key, page_no, rot).run();
+    }
     await env.PDFS.delete(pageKey(upload_id, page_no));
     msg.ack();
   } catch (e) {
@@ -252,7 +259,7 @@ export default {
         const limit = Math.min(Number(url.searchParams.get("limit")) || 500, 5000);
         const offset = Number(url.searchParams.get("offset")) || 0;
         const [{ results }, total] = await Promise.all([
-          env.DB.prepare(`SELECT * FROM vehicles ${w.sql} ${orderBy(url)} LIMIT ? OFFSET ?`).bind(...w.args, limit, offset).all(),
+          env.DB.prepare(`SELECT vehicles.*, (SELECT rotation FROM page_rotations WHERE rot_key = vehicles.pdf_key AND rot_page = COALESCE(vehicles.page_no, 1)) AS page_rotation FROM vehicles ${w.sql} ${orderBy(url)} LIMIT ? OFFSET ?`).bind(...w.args, limit, offset).all(),
           env.DB.prepare(`SELECT COUNT(*) AS n FROM vehicles ${w.sql}`).bind(...w.args).first("n"),
         ]);
         return json({ total, rows: results });
@@ -369,7 +376,17 @@ export default {
         return json({ ok: true, pdf_key: file.name });
       }
 
-      // 出品票のページ画像（マウスを乗せたときのプレビュー用）。初回はPDFから取り出してR2に保存する
+      // 出品票の向きを保存（画面の ⟲ ⟳ ボタン）
+      if (path === "/api/page-rotation" && method === "PUT") {
+        const b = await request.json();
+        const rot = ((Number(b.rotation) % 360) + 360) % 360;
+        if (!b.pdf_key || ![0, 90, 180, 270].includes(rot)) return json({ error: "向きの指定が正しくありません" }, 400);
+        await env.DB.prepare("INSERT INTO page_rotations (rot_key, rot_page, rotation, source) VALUES (?, ?, ?, 'manual') ON CONFLICT(rot_key, rot_page) DO UPDATE SET rotation = excluded.rotation, source = 'manual'")
+          .bind(b.pdf_key, Math.max(1, Number(b.page_no) || 1), rot).run();
+        return json({ ok: true, rotation: rot });
+      }
+
+      // 出品票のページ画像（画面下の表示用）。初回はPDFから取り出してR2に保存する
       const im = path.match(/^\/api\/page-image\/(.+)$/);
       if (im && method === "GET") {
         const key = decodeURIComponent(im[1]);
@@ -391,7 +408,8 @@ export default {
       if (pp && method === "GET") {
         const key = decodeURIComponent(pp[1]);
         const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
-        const cacheKey = `pagepdf/${key}/${page}.pdf`;
+        const rot = [90, 180, 270].includes(Number(url.searchParams.get("rot"))) ? Number(url.searchParams.get("rot")) : 0;
+        const cacheKey = `pagepdf/${key}/${page}${rot ? "_r" + rot : ""}.pdf`;
         const headers = {
           "content-type": "application/pdf",
           "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(key.split("/").pop().replace(/\.pdf$/i, "") + `_p${page}.pdf`)}`,
@@ -401,7 +419,7 @@ export default {
         if (cached) return new Response(cached.body, { headers });
         const pdf = await env.PDFS.get(key);
         if (!pdf) return new Response("PDFが見つかりません", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
-        const one = await extractOnePage(new Uint8Array(await pdf.arrayBuffer()), page - 1);
+        const one = await extractOnePage(new Uint8Array(await pdf.arrayBuffer()), page - 1, rot);
         if (!one) return new Response("そのページはPDFにありません", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
         await env.PDFS.put(cacheKey, one, { httpMetadata: { contentType: "application/pdf" } });
         return new Response(one, { headers });
