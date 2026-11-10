@@ -258,7 +258,7 @@ const FILTERS = ["buyer", "q", "auction_house", "year_from", "year_to", "date_fr
 const COLUMNS = [
   ["buyer", "仕入れ担当", 1], ["auction_date", "開催日", 1], ["auction_house", "会場", 1],
   ["year", "年式", 1], ["car_name", "車名", 1], ["model_code", "型式", 1], ["grade", "グレード", 1],
-  ["color", "色", 1], ["mileage_km", "走行(千km)", 1], ["start_price_man", "スタート", 1],
+  ["color", "色", 1], ["mileage_km", "走行距離", 1], ["start_price_man", "スタート", 1],
   ["bid_price_man", "落札金額", 1], ["planned_price_man", "予定車両価格", 1], ["diff", "予定−落札×1.1", 0],
   ["score", "評価", 1], ["extint", "外/内", 0], ["color_code", "カラーNo", 1], ["displacement_cc", "排気", 1],
   ["shift", "ｼﾌﾄ", 1], ["inspection", "車検", 1], ["lot_no", "出品番号", 1], ["maker", "メーカー", 1],
@@ -344,7 +344,7 @@ function td(r, k, i) {
       const d = r.planned_price_man - r.bid_price_man * 1.1;
       return `<td class="money" style="color:${d < 0 ? "#c00" : "#080"}">${d > 0 ? "+" : ""}${d.toFixed(1)}</td>`;
     }
-    case "mileage_km": return `<td class="n" title="${v == null ? "" : Number(v).toLocaleString() + " km"}">${v == null ? "" : (v / 1000).toFixed(1)}</td>`;
+    case "mileage_km": return `<td class="n">${v == null ? "" : Number(v).toLocaleString() + "km"}</td>`;
     case "year": return `<td title="${v ?? ""}">${v ? wareki(v) || v : ""}</td>`;
     case "score": return `<td class="sc">${h(v)}</td>`;
     case "extint": return `<td>${r.score_exterior || r.score_interior ? `${h(r.score_exterior)}/${h(r.score_interior)}` : ""}</td>`;
