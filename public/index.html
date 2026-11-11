@@ -44,7 +44,17 @@
   /* 回転率：上1/3＝グラフと売れた車（位置は固定）、下2/3＝一覧（ここだけスクロール） */
   #tab-turnover { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #tab-turnover > .top { flex: none; }
-  #tab-turnover > .tv-wrap { flex: 1; min-height: 0; overflow: auto; }
+  /* 縦スクロールは「車名ごとの回転率」の表の中だけ */
+  /* 左＝月ごとの回転率、右＝車名ごとの回転率（右の表の中だけ縦にスクロール） */
+  #tab-turnover > .tv-wrap { flex: 1; min-height: 0; display: flex; gap: 12px; align-items: stretch; overflow: hidden; }
+  #tab-turnover > .tv-wrap > .tv-card { flex: none; margin-bottom: 0; }
+  #tab-turnover > .tv-wrap > .tv-card:first-child { width: fit-content; max-width: 54%; overflow: auto; align-self: flex-start; max-height: 100%; }
+  #tab-turnover > .tv-wrap > .tv-card:first-child .tv-table td, #tab-turnover > .tv-wrap > .tv-card:first-child .tv-table th { padding: 4px 6px; }
+  #tab-turnover > .tv-wrap > .tv-card:first-child .btn { padding: 2px 5px !important; font-size: 11px; }
+  #tab-turnover > .tv-wrap > #tvModelCard { flex: 1; min-width: 0; min-height: 120px; display: flex; flex-direction: column; }
+  #tvModelCard > * { flex: none; }
+  #tvModelCard > .scroll { flex: 1; min-height: 0; overflow: auto; }
+  #tvModelHead th { position: sticky; top: 0; z-index: 2; }
   #tvPanel { flex: none; height: 33.3vh; min-height: 240px; display: flex; flex-direction: column; background: #fff; border-bottom: 3px solid var(--navy); }
   #tvPanel .bar2 { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 12px; background: var(--navy); color: #fff; font-size: 12px; }
   #tvPanel .bar2 b { font-size: 13px; }
@@ -144,6 +154,10 @@
   .tv-table th:first-child, .tv-table td:first-child { text-align: left; }
   .tv-table thead th { position: static; cursor: default; }
   .tv-rate { font-weight: 800; font-size: 15px; color: #0b2b87; }
+  .tv-hbar { position: relative; height: 12px; background: #eef1f6; border-radius: 6px; overflow: hidden; }
+  .tv-hbar .now, .tv-hbar .fc { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+  .tv-hbar .now { background: var(--accent); }
+  .tv-hbar .fc { background: repeating-linear-gradient(45deg, #ffd8b0 0 4px, #ffe9d2 4px 8px); }
   .tv-bar { height: 10px; background: var(--accent); border-radius: 5px; min-width: 2px; }
   .tv-table tbody tr.sel td { background: #fff5c4; }
   #tvModelRows tr { cursor: pointer; }
@@ -277,10 +291,10 @@
   <div class="tv-wrap">
     <div class="tv-card">
       <h2>月ごとの回転率</h2>
-      <div class="tv-note">回転率 ＝ その月の販売台数（販売データの契約日付の月で数える）÷ 月初在庫。月を押すと、下に車名ごとの回転率が出ます。</div>
+      <div class="tv-note">回転率 ＝ その月の販売台数（販売データの契約日付の月で数える）÷ 月初在庫。月を押すと、右に車名ごとの回転率が出ます。</div>
       <div style="overflow:auto;margin-top:8px">
         <table class="tv-table">
-          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th title="当月だけ。月末までの販売を、残りの平日・土日祝の日数から予想">着地予想</th><th>平均台粗利</th><th style="width:160px"></th><th>削除</th></tr></thead>
+          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th title="当月だけ。月末までの販売を、残りの平日・土日祝の日数から予想">着地予想</th><th>平均台粗利</th><th style="text-align:left">グラフ</th></tr></thead>
           <tbody id="tvRows"></tbody>
         </table>
       </div>
@@ -289,18 +303,14 @@
     <div class="tv-card" id="tvModelCard" hidden>
       <h2 id="tvModelTitle"></h2>
       <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名を押すと、回転率と台粗利の推移のグラフが出ます。</div>
-      <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 0;margin:8px 0">
+      <input id="tvModelFilter" placeholder="車名でしぼり込み" style="width:180px">
       <label class="tv-min" title="チェックを外すと全部の車を表示します"><input type="checkbox" id="tvMinOn" checked> 月初在庫 <input type="number" id="tvMinN" value="5" min="0" step="1" style="width:52px;padding:2px 4px"> 台以上のみ</label>
       <span class="tv-note" id="wxLegend" style="margin-left:10px"></span>
-      <div style="overflow:auto">
-        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="forecast" id="tvFcHead" hidden>着地予想</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
-        <tbody id="tvModelRows"></tbody></table>
       </div>
-    </div>
-    <div class="tv-card" id="tvSoldCard" hidden>
-      <h2 id="tvSoldTitle"></h2>
-      <div style="overflow:auto;max-height:50vh">
-        <table><thead id="tvSoldHead"></thead><tbody id="tvSoldRows"></tbody></table>
+      <div class="scroll">
+        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:120px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="forecast" id="tvFcHead" hidden>着地予想</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
+        <tbody id="tvModelRows"></tbody></table>
       </div>
     </div>
   </div>
@@ -316,6 +326,13 @@
   <iframe id="pdfFrame" title="PDF"></iframe>
 </dialog>
 <dialog id="editDlg"><form method="dialog" id="editForm"></form></dialog>
+<dialog id="tvSoldDlg" style="width:min(900px,96vw)">
+  <div class="hd" style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--navy);color:#fff"><b id="tvSoldTitle"></b><span style="flex:1"></span>
+    <button class="btn btn-sub" id="tvSoldClose" style="padding:2px 10px">閉じる ✕</button></div>
+  <div style="overflow:auto;max-height:75vh;padding:8px 12px">
+    <table><thead id="tvSoldHead"></thead><tbody id="tvSoldRows"></tbody></table>
+  </div>
+</dialog>
 <dialog id="wxDlg" style="width:min(820px,96vw)"><form method="dialog" id="wxForm"></form></dialog>
 
 <script>

@@ -45,8 +45,14 @@ async function loadTurnover() {
   if (seq !== tvLoadSeq) return;
   const months = data.months || [];
   tvForecast = data.forecast || null;
-  const maxRate = Math.max(0.0001, ...months.map((m) => m.rate || 0));
   $("tvEmpty").hidden = months.length > 0;
+  // 回転率の横グラフ（目盛りは全部の月で共通。当月は着地予想を薄い色で重ねる）
+  const fcRate = (m) => (tvForecast && tvForecast.month === m.month && m.rate != null ? m.rate * tvForecast.factor : null);
+  const barMax = Math.max(0.0001, ...months.map((m) => Math.max(m.rate || 0, fcRate(m) || 0)));
+  const BW = 90;
+  const rateBar = (m) => m.rate == null ? "" : `<div class="tv-hbar" style="width:${BW}px" title="回転率 ${pct(m.rate)}${fcRate(m) != null ? `／着地予想 ${pct(fcRate(m))}` : ""}">
+      ${fcRate(m) != null ? `<div class="fc" style="width:${(Math.min(fcRate(m), barMax) / barMax) * BW}px"></div>` : ""}
+      <div class="now" style="width:${Math.max(2, (m.rate / barMax) * BW)}px"></div></div>`;
   $("tvRows").innerHTML = months.map((m) => `
     <tr data-month="${m.month}" class="${m.month === tvMonth ? "sel" : ""}" style="cursor:pointer" title="押すと車名ごとの回転率を表示">
       <td><b>${monthLabel(m.month)}</b></td>
@@ -57,9 +63,7 @@ async function loadTurnover() {
       <td class="n tv-rate">${pct(m.rate)}</td>
       <td class="n">${tvForecast && tvForecast.month === m.month ? fcHtml(m.rate, tvForecast) + `<div class="tv-dim" style="font-size:11px;font-weight:400">販売 ${tvForecast.sold.toLocaleString()}台の見込み</div>` : ""}</td>
       <td class="n"><b>${man1(m.gross_avg)}</b>${m.gross_total != null ? `<div class="tv-dim" style="font-size:11px">合計 ${Math.round(m.gross_total / 10000).toLocaleString()}万円</div>` : ""}</td>
-      <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / maxRate) * 150)}px"></div></td>
-      <td style="white-space:nowrap">${m.item_count == null ? "" : `<button class="btn btn-sub" data-del="${m.month}" style="padding:2px 6px">在庫</button>`}
-        ${m.sold == null ? "" : `<button class="btn btn-sub" data-delsales="${m.month}" style="padding:2px 6px">販売</button>`}</td>
+      <td>${rateBar(m)}</td>
     </tr>`).join("");
   // 最初は、月初在庫と販売データがそろっている一番新しい月を表示
   if (!tvMonth || !months.some((m) => m.month === tvMonth)) {
@@ -213,14 +217,12 @@ $("tvRows").addEventListener("click", async (e) => {
   if (ds) {
     if (!confirm(`${monthLabel(ds.dataset.delsales)}の販売データを削除しますか？`)) return;
     await fetch(`/api/sales/${ds.dataset.delsales}`, { method: "DELETE" });
-    $("tvSoldCard").hidden = true;
     return loadTurnover();
   }
   const del = e.target.closest("[data-del]");
   if (del) {
     if (!confirm(`${monthLabel(del.dataset.del)}の月初在庫を削除しますか？`)) return;
     await fetch(`/api/inventory/${del.dataset.del}`, { method: "DELETE" });
-    $("tvSoldCard").hidden = true;
     return loadTurnover();
   }
   const tr = e.target.closest("tr[data-month]");
@@ -236,9 +238,9 @@ async function showSales(month) {
   $("tvSoldRows").innerHTML = j.rows.map((r) => `<tr>
     <td>${h(r.slip_no)}</td><td>${h(r.contract_date)}</td><td>${h(r.delivery_date)}</td><td>${h(r.car_name)}</td>
     <td class="n">${yen(r.price)}</td><td class="n">${r.discount ? yen(r.discount) : ""}</td><td class="n">${yen(r.sales_amount)}</td></tr>`).join("");
-  $("tvSoldCard").hidden = false;
-  $("tvSoldCard").scrollIntoView({ behavior: "smooth" });
+  $("tvSoldDlg").showModal();
 }
+$("tvSoldClose").onclick = () => $("tvSoldDlg").close();
 
 // 月初在庫・販売データCSVの取り込み（Shift_JIS のCSVもそのまま読めるようにする）
 async function readText(file) {
