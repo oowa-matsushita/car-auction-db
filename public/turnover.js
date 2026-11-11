@@ -105,7 +105,7 @@ function weatherOf(m) {
 function wxLegend() {
   const c = wxCfg, L = c.levels;
   const rng = (i) => { const lo = L[i], hi = i === 0 ? 6 : L[i - 1] - 1; return lo >= hi ? `${lo}点` : `${lo}〜${hi}点`; };
-  $("wxLegend").textContent = `天気：🌞快晴(${rng(0)}) 🌤️晴れ(${rng(1)}) ☁️曇り(${rng(2)}) 🌧️雨(${rng(3)}) 🌀台風(${L[3] - 1 <= 0 ? "0点" : `0〜${L[3] - 1}点`})`;
+  $("wxLegend").innerHTML = `天気：🌞快晴(${rng(0)}) 🌤️晴れ(${rng(1)}) ☁️曇り(${rng(2)}) 🌧️雨(${rng(3)}) <span class="wx-red"><i>🌀</i>台風(${L[3] - 1 <= 0 ? "0点" : `0〜${L[3] - 1}点`})</span>`;
   $("wxLegend").title = `回転率：${c.rate[0]}%以上=3点・${c.rate[1]}%以上=2点・${c.rate[2]}%以上=1点／台粗利：${c.gross[0]}万以上=3点・${c.gross[1]}万以上=2点・${c.gross[2]}万以上=1点`;
 }
 async function loadWx() {
@@ -124,7 +124,7 @@ function openWx() {
       <div style="font-weight:700;margin-top:6px">平均台粗利</div>
       3点：${inp("wxG0", c.gross[0], 0.1)}万円 以上　2点：${inp("wxG1", c.gross[1], 0.1)}万円 以上　1点：${inp("wxG2", c.gross[2], 0.1)}万円 以上　（それ未満は0点）
       <div style="font-weight:700;margin-top:6px">天気（2つの点数の合計 0〜6点）</div>
-      🌞快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は🌀台風）
+      🌞快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は<span class="wx-red"><i>🌀</i>台風</span>）
       <div id="wxErr" style="color:#c62828;min-height:1.5em"></div>
       <div style="display:flex;gap:8px">
         <button type="button" class="btn btn-ok" id="wxSave">保存</button>
@@ -185,7 +185,7 @@ function drawModels() {
     <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
     <td class="n">${man1(m.gross_avg)}</td>
     ${(() => { const w = weatherOf(m); return w
-      ? `<td class="tv-wx" title="${w.label}（回転率${rateScore(m.rate)}点＋台粗利${grossScore(m.gross_avg)}点＝${w.score}点）"><span>${w.icon}</span>${w.label}</td>`
+      ? `<td class="tv-wx${w.label === "台風" ? " wx-red" : ""}" title="${w.label}（回転率${rateScore(m.rate)}点＋台粗利${grossScore(m.gross_avg)}点＝${w.score}点）"><span>${w.icon}</span>${w.label}</td>`
       : '<td class="tv-wx tv-dim" title="月初在庫か台粗利が無いため判定できません">—</td>'; })()}
   </tr>`).join("") || '<tr><td colspan="6" class="tv-dim">該当する車がありません</td></tr>';
 }

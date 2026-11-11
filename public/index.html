@@ -137,6 +137,9 @@
   #tvModelRows tr { cursor: pointer; }
   .tv-wx { white-space: nowrap; font-size: 12px; }
   .tv-wx span { font-size: 18px; margin-right: 4px; vertical-align: middle; }
+  /* 台風は赤（青い🌀の絵文字を赤っぽく変える） */
+  .wx-red { color: #d32f2f; font-weight: 700; }
+  .wx-red span, .wx-red i { font-style: normal; filter: hue-rotate(150deg) saturate(2.5); }
   #tvModelHead th { cursor: pointer; user-select: none; white-space: nowrap; }
   #tvModelHead th:hover { background: #d5dde8; }
   #tvModelHead th.on { background: #ffe08f; }
@@ -238,6 +241,7 @@
     <select id="tvCh"><option value="all">小売＋業販</option><option value="retail">小売のみ</option><option value="wholesale">業販のみ</option></select>
     <span style="font-size:12px;color:#c9e6ee">台粗利</span>
     <select id="tvTax" title="台粗利 ＝ 車両本体価格 − 本体原価"><option value="ex">本体価格を税抜にして計算</option><option value="in">本体価格（税込）のまま計算</option></select>
+    <button class="btn btn-sub" id="wxBtn" style="font-size:12px;padding:4px 12px" title="天気マークの基準（回転率・台粗利の点数）を変えます">⚙ 設定</button>
     <div id="tvLog" style="font-size:12px;color:#ffe9a8"></div>
   </div>
   <div class="tv-wrap">
@@ -269,7 +273,6 @@
       <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名を押すと、回転率と台粗利の推移のグラフが出ます。</div>
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
       <span class="tv-note" id="wxLegend" style="margin-left:10px"></span>
-      <button class="btn btn-sub" id="wxBtn" style="margin-left:8px;font-size:12px;padding:4px 10px">⚙ 天気の基準</button>
       <div style="overflow:auto;max-height:60vh">
         <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
         <tbody id="tvModelRows"></tbody></table>
