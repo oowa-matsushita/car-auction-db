@@ -230,6 +230,16 @@ function drawModels() {
   </tr>`).join("") || '<tr><td colspan="7" class="tv-dim">該当する車がありません</td></tr>';
 }
 $("tvModelFilter").addEventListener("input", drawModels);
+// クリア：車名のしぼり込み・月初在庫●台以上（5台に戻す）・並べ替え（天気の良い順）・選んだ車とグラフを はじめの状態に戻す
+$("tvModelClear").onclick = () => {
+  $("tvModelFilter").value = "";
+  $("tvMinOn").checked = true; $("tvMinN").value = 5;
+  try { localStorage.removeItem("tvMin"); } catch {}
+  tvSort.key = "weather"; tvSort.dir = "desc";
+  clearPanel();
+  drawModels();
+  $("tvModelCard").querySelector(".scroll").scrollTop = 0;
+};
 // 「月初在庫●台以上のみ」（はじめは5台以上だけ表示。変えた値はこのパソコンに覚える）
 try { const v = JSON.parse(localStorage.getItem("tvMin") || "null"); if (v) { $("tvMinOn").checked = !!v.on; $("tvMinN").value = v.n; } } catch {}
 const saveMin = () => { try { localStorage.setItem("tvMin", JSON.stringify({ on: $("tvMinOn").checked, n: Number($("tvMinN").value) || 0 })); } catch {} };
