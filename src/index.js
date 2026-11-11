@@ -515,7 +515,7 @@ export default {
       }
 
       // 回転率（月初在庫・販売台数）
-      if (path.startsWith("/api/turnover") || path.startsWith("/api/inventory") || path.startsWith("/api/sales")) {
+      if (path.startsWith("/api/turnover") || path.startsWith("/api/inventory") || path.startsWith("/api/sales") || path.startsWith("/api/settings")) {
         const res = await handleTurnover(request, env, url);
         if (res) return res;
       }

@@ -86,23 +86,77 @@ $("tvModelHead").addEventListener("click", (e) => {
   drawModels();
 });
 // ---------- 天気（回転率と平均台粗利の組み合わせ） ----------
-// 回転率：40%以上=3、35%以上=2、30%以上=1、それ未満=0
-// 台粗利：15万以上=3、10万以上=2、5万以上=1、それ未満=0
-// 合計 6=快晴、4〜5=晴れ、3=曇り、1〜2=雨、0=台風
-const WEATHER = [
-  { min: 6, icon: "☀️", label: "快晴" },
-  { min: 4, icon: "🌤️", label: "晴れ" },
-  { min: 3, icon: "☁️", label: "曇り" },
-  { min: 1, icon: "🌧️", label: "雨" },
-  { min: 0, icon: "🌀", label: "台風" },
-];
-const rateScore = (r) => (r >= 0.4 ? 3 : r >= 0.35 ? 2 : r >= 0.3 ? 1 : 0);
-const grossScore = (g) => (g >= 150000 ? 3 : g >= 100000 ? 2 : g >= 50000 ? 1 : 0);
+// 基準は「⚙ 天気の基準」ボタンで変えられる（サーバーに保存してみんなで共通）
+// rate：回転率(%) の 3点/2点/1点 の下限、gross：平均台粗利(万円) の 3点/2点/1点 の下限
+// levels：快晴/晴れ/曇り/雨 になる合計点の下限（それ未満は台風）
+const WX_DEFAULT = { rate: [40, 35, 30], gross: [15, 10, 5], levels: [6, 4, 3, 1] };
+let wxCfg = structuredClone(WX_DEFAULT);
+const WX_LOOK = [["☀️", "快晴"], ["🌤️", "晴れ"], ["☁️", "曇り"], ["🌧️", "雨"], ["🌀", "台風"]];
+const stepScore = (v, cuts) => { const i = cuts.findIndex((c) => v >= c); return i < 0 ? 0 : 3 - i; };
+const rateScore = (r) => stepScore(r * 100 + 1e-9, wxCfg.rate);
+const grossScore = (g) => stepScore(g / 10000 + 1e-9, wxCfg.gross);
 function weatherOf(m) {
   if (m.rate == null || m.gross_avg == null) return null;
   const score = rateScore(m.rate) + grossScore(m.gross_avg);
-  return { score, ...WEATHER.find((w) => score >= w.min) };
+  let i = wxCfg.levels.findIndex((l) => score >= l);
+  if (i < 0) i = 4;
+  return { score, icon: WX_LOOK[i][0], label: WX_LOOK[i][1] };
 }
+function wxLegend() {
+  const c = wxCfg, L = c.levels;
+  const rng = (i) => { const lo = L[i], hi = i === 0 ? 6 : L[i - 1] - 1; return lo >= hi ? `${lo}点` : `${lo}〜${hi}点`; };
+  $("wxLegend").textContent = `天気：☀️快晴(${rng(0)}) 🌤️晴れ(${rng(1)}) ☁️曇り(${rng(2)}) 🌧️雨(${rng(3)}) 🌀台風(${L[3] - 1 <= 0 ? "0点" : `0〜${L[3] - 1}点`})`;
+  $("wxLegend").title = `回転率：${c.rate[0]}%以上=3点・${c.rate[1]}%以上=2点・${c.rate[2]}%以上=1点／台粗利：${c.gross[0]}万以上=3点・${c.gross[1]}万以上=2点・${c.gross[2]}万以上=1点`;
+}
+async function loadWx() {
+  try {
+    const d = await (await fetch("/api/settings/weather")).json();
+    wxCfg = d.weather || structuredClone(WX_DEFAULT);
+  } catch {}
+  wxLegend(); if (typeof tvModels !== "undefined" && tvModels.length) drawModels();
+}
+function openWx() {
+  const c = wxCfg, inp = (id, v, step) => `<input id="${id}" type="number" step="${step}" value="${v}" style="width:64px;padding:2px 6px">`;
+  $("wxForm").innerHTML = `<div class="hd"><b>天気の基準</b><span style="flex:1"></span></div>
+    <div style="padding:14px 18px;line-height:2.2">
+      <div style="font-weight:700">回転率</div>
+      3点：${inp("wxR0", c.rate[0], 0.1)}% 以上　2点：${inp("wxR1", c.rate[1], 0.1)}% 以上　1点：${inp("wxR2", c.rate[2], 0.1)}% 以上　（それ未満は0点）
+      <div style="font-weight:700;margin-top:6px">平均台粗利</div>
+      3点：${inp("wxG0", c.gross[0], 0.1)}万円 以上　2点：${inp("wxG1", c.gross[1], 0.1)}万円 以上　1点：${inp("wxG2", c.gross[2], 0.1)}万円 以上　（それ未満は0点）
+      <div style="font-weight:700;margin-top:6px">天気（2つの点数の合計 0〜6点）</div>
+      ☀️快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は🌀台風）
+      <div id="wxErr" style="color:#c62828;min-height:1.5em"></div>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn btn-ok" id="wxSave">保存</button>
+        <button type="button" class="btn btn-sub" id="wxReset">はじめの基準に戻す</button>
+        <span style="flex:1"></span>
+        <button type="button" class="btn btn-sub" id="wxClose">閉じる ✕</button>
+      </div>
+      <div class="tv-note">保存した基準は、このサイトを見る全員で共通です。</div>
+    </div>`;
+  const v = (id) => Number($(id).value);
+  $("wxClose").onclick = () => $("wxDlg").close();
+  $("wxReset").onclick = async () => {
+    if (!confirm("はじめの基準（回転率40/35/30%、台粗利15/10/5万円、快晴6・晴れ4・曇り3・雨1点）に戻しますか？")) return;
+    await fetch("/api/settings/weather", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ reset: true }) });
+    $("wxDlg").close(); loadWx();
+  };
+  $("wxSave").onclick = async () => {
+    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")] };
+    const desc = (a) => a.every((x, i) => i === 0 || a[i - 1] > x);
+    const err = [...b.rate, ...b.gross, ...b.levels].some((x) => !Number.isFinite(x)) ? "空欄があります"
+      : !desc(b.rate) ? "回転率は 3点 ＞ 2点 ＞ 1点 の順に大きくしてください"
+      : !desc(b.gross) ? "台粗利は 3点 ＞ 2点 ＞ 1点 の順に大きくしてください"
+      : !desc(b.levels) || b.levels[0] > 6 || b.levels[3] < 0 ? "天気の点数は 快晴 ＞ 晴れ ＞ 曇り ＞ 雨 の順に、0〜6点の間で入れてください" : "";
+    if (err) { $("wxErr").textContent = err; return; }
+    const res = await fetch("/api/settings/weather", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+    if (!res.ok) { $("wxErr").textContent = (await res.json().catch(() => ({}))).error || "保存できませんでした"; return; }
+    $("wxDlg").close(); loadWx();
+  };
+  $("wxDlg").showModal();
+}
+$("wxBtn").onclick = openWx;
+loadWx();
 
 function sortModels(list) {
   const { key, dir } = tvSort, sign = dir === "asc" ? 1 : -1;

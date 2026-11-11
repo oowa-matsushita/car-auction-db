@@ -112,7 +112,7 @@
   #editForm .acts { grid-column: 1 / -1; display: flex; gap: 8px; }
   #editForm .acts .grow { flex: 1; }
   #pdfDlg { width: min(1100px, 96vw); height: 92vh; }
-  #pdfDlg .hd { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--navy); color: #fff; }
+  #pdfDlg .hd, #wxDlg .hd { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--navy); color: #fff; }
   #pdfDlg .hd a { color: #9fd0ff; font-size: 12px; }
   #pdfDlg iframe { width: 100%; height: calc(100% - 44px); border: 0; background: #555; }
   /* ---- タブ（画面の切り替え） ---- */
@@ -268,7 +268,8 @@
       <h2 id="tvModelTitle"></h2>
       <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名を押すと、回転率と台粗利の推移のグラフが出ます。</div>
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
-      <span class="tv-note" style="margin-left:10px" title="回転率：40%以上=3点・35%以上=2点・30%以上=1点／台粗利：15万以上=3点・10万以上=2点・5万以上=1点。合計 6点=快晴、4〜5点=晴れ、3点=曇り、1〜2点=雨、0点=台風">天気：☀️快晴 🌤️晴れ ☁️曇り 🌧️雨 🌀台風（回転率と平均台粗利の点数の合計）</span>
+      <span class="tv-note" id="wxLegend" style="margin-left:10px"></span>
+      <button class="btn btn-sub" id="wxBtn" style="margin-left:8px;font-size:12px;padding:4px 10px">⚙ 天気の基準</button>
       <div style="overflow:auto;max-height:60vh">
         <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
         <tbody id="tvModelRows"></tbody></table>
@@ -293,6 +294,7 @@
   <iframe id="pdfFrame" title="PDF"></iframe>
 </dialog>
 <dialog id="editDlg"><form method="dialog" id="editForm"></form></dialog>
+<dialog id="wxDlg" style="width:min(820px,96vw)"><form method="dialog" id="wxForm"></form></dialog>
 
 <script>
 "use strict";

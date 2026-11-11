@@ -21,6 +21,7 @@ export const TURNOVER_SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_inv_items_chassis ON inv_items(month, chassis_no)",
   "CREATE TABLE IF NOT EXISTS sales_items ( month TEXT NOT NULL, slip_no TEXT, contract_date TEXT, delivery_date TEXT, car_name TEXT, price INTEGER, discount INTEGER, sales_amount INTEGER, filename TEXT, stock_no TEXT, chassis_no TEXT )",
   "CREATE INDEX IF NOT EXISTS idx_sales_items_month ON sales_items(month)",
+  "CREATE TABLE IF NOT EXISTS app_settings ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
 ];
 
 // CSV の見出し → 保存する列
@@ -202,6 +203,23 @@ export async function handleTurnover(request, env, url) {
   // 月ごとの一覧
   const ch = url.searchParams.get("ch") || "all";
   const tax = url.searchParams.get("tax") === "in" ? "in" : "ex";
+  // 天気マークの基準（みんなで共通）
+  if (path === "/api/settings/weather") {
+    if (method === "GET") {
+      const r = await db.prepare("SELECT value FROM app_settings WHERE key = 'weather'").first();
+      return json({ weather: r ? JSON.parse(r.value) : null });
+    }
+    if (method === "PUT") {
+      const b = await request.json();
+      const nums = (a, n) => Array.isArray(a) && a.length === n && a.every((x) => Number.isFinite(Number(x)));
+      if (b && b.reset) { await db.prepare("DELETE FROM app_settings WHERE key = 'weather'").run(); return json({ ok: true, weather: null }); }
+      if (!b || !nums(b.rate, 3) || !nums(b.gross, 3) || !nums(b.levels, 4)) return json({ error: "基準の数字が正しくありません" }, 400);
+      const v = { rate: b.rate.map(Number), gross: b.gross.map(Number), levels: b.levels.map(Number) };
+      await db.prepare("INSERT INTO app_settings (key, value) VALUES ('weather', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')").bind(JSON.stringify(v)).run();
+      return json({ ok: true, weather: v });
+    }
+  }
+
   if (path === "/api/turnover" && method === "GET") {
     // 月初在庫か販売データのどちらかがある月を並べる
     const { results: months } = await db.prepare(`
