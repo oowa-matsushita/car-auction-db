@@ -91,7 +91,7 @@ $("tvModelHead").addEventListener("click", (e) => {
 // levels：快晴/晴れ/曇り/雨 になる合計点の下限（それ未満は台風）
 const WX_DEFAULT = { rate: [40, 35, 30], gross: [15, 10, 5], levels: [6, 4, 3, 1] };
 let wxCfg = structuredClone(WX_DEFAULT);
-const WX_LOOK = [["☀️", "快晴"], ["🌤️", "晴れ"], ["☁️", "曇り"], ["🌧️", "雨"], ["🌀", "台風"]];
+const WX_LOOK = [["🌞", "快晴"], ["🌤️", "晴れ"], ["☁️", "曇り"], ["🌧️", "雨"], ["🌀", "台風"]];
 const stepScore = (v, cuts) => { const i = cuts.findIndex((c) => v >= c); return i < 0 ? 0 : 3 - i; };
 const rateScore = (r) => stepScore(r * 100 + 1e-9, wxCfg.rate);
 const grossScore = (g) => stepScore(g / 10000 + 1e-9, wxCfg.gross);
@@ -105,7 +105,7 @@ function weatherOf(m) {
 function wxLegend() {
   const c = wxCfg, L = c.levels;
   const rng = (i) => { const lo = L[i], hi = i === 0 ? 6 : L[i - 1] - 1; return lo >= hi ? `${lo}点` : `${lo}〜${hi}点`; };
-  $("wxLegend").textContent = `天気：☀️快晴(${rng(0)}) 🌤️晴れ(${rng(1)}) ☁️曇り(${rng(2)}) 🌧️雨(${rng(3)}) 🌀台風(${L[3] - 1 <= 0 ? "0点" : `0〜${L[3] - 1}点`})`;
+  $("wxLegend").textContent = `天気：🌞快晴(${rng(0)}) 🌤️晴れ(${rng(1)}) ☁️曇り(${rng(2)}) 🌧️雨(${rng(3)}) 🌀台風(${L[3] - 1 <= 0 ? "0点" : `0〜${L[3] - 1}点`})`;
   $("wxLegend").title = `回転率：${c.rate[0]}%以上=3点・${c.rate[1]}%以上=2点・${c.rate[2]}%以上=1点／台粗利：${c.gross[0]}万以上=3点・${c.gross[1]}万以上=2点・${c.gross[2]}万以上=1点`;
 }
 async function loadWx() {
@@ -124,7 +124,7 @@ function openWx() {
       <div style="font-weight:700;margin-top:6px">平均台粗利</div>
       3点：${inp("wxG0", c.gross[0], 0.1)}万円 以上　2点：${inp("wxG1", c.gross[1], 0.1)}万円 以上　1点：${inp("wxG2", c.gross[2], 0.1)}万円 以上　（それ未満は0点）
       <div style="font-weight:700;margin-top:6px">天気（2つの点数の合計 0〜6点）</div>
-      ☀️快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は🌀台風）
+      🌞快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は🌀台風）
       <div id="wxErr" style="color:#c62828;min-height:1.5em"></div>
       <div style="display:flex;gap:8px">
         <button type="button" class="btn btn-ok" id="wxSave">保存</button>
