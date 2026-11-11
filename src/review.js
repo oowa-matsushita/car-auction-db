@@ -5,6 +5,8 @@ import { modelName } from "./turnover.js";
 // データの値から「確認が必要な車」を見つける。確認済みにした車（review_checked = 1）は出さない。
 export const REVIEW_ADDED_COLUMNS = [
   "ALTER TABLE vehicles ADD COLUMN review_checked INTEGER DEFAULT 0",
+  // 相場・売値の外れは、ほかの確認とは別に「確認済み」を持つ（前に確認済みにした車でも、新しく外れが見つかれば出す）
+  "ALTER TABLE vehicles ADD COLUMN outlier_checked INTEGER DEFAULT 0",
   "CREATE TABLE IF NOT EXISTS crop_regions ( house TEXT NOT NULL, field TEXT NOT NULL, x REAL, y REAL, w REAL, h REAL, updated_at TEXT DEFAULT (datetime('now','localtime')), PRIMARY KEY (house, field) )",
   "CREATE TABLE IF NOT EXISTS price_units ( house TEXT PRIMARY KEY, unit TEXT NOT NULL, source TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
 ];
@@ -104,9 +106,13 @@ export async function handleReview(request, env, url) {
     const items = [];
     let checked = 0;
     for (const r of results) {
-      const iss = issuesOf(r, dupCount, byModel);
+      let iss = issuesOf(r, dupCount, byModel);
+      if (r.outlier_checked) iss = iss.filter((i) => i[0] !== "outlier");
       if (!iss.length) continue;
-      if (r.review_checked) { checked++; continue; }
+      if (r.review_checked) {
+        iss = iss.filter((i) => i[0] === "outlier");
+        if (!iss.length) { checked++; continue; }
+      }
       const kind = REVIEW_KINDS.find((k) => iss.some((i) => i[0] === k.key)).key; // いちばん優先度の高い種類で分ける
       items.push({ ...r, kind, issues: iss.map((i) => i[1]) });
     }
@@ -166,8 +172,8 @@ export async function handleReview(request, env, url) {
   const m = path.match(/^\/api\/review\/(\d+)$/);
   if (m && method === "PUT") {
     const b = await request.json();
-    await db.prepare("UPDATE vehicles SET review_checked = ?, needs_review = CASE WHEN ? = 1 THEN 0 ELSE needs_review END, updated_at = datetime('now','localtime') WHERE id = ?")
-      .bind(b.checked ? 1 : 0, b.checked ? 1 : 0, Number(m[1])).run();
+    await db.prepare("UPDATE vehicles SET review_checked = ?, outlier_checked = ?, needs_review = CASE WHEN ? = 1 THEN 0 ELSE needs_review END, updated_at = datetime('now','localtime') WHERE id = ?")
+      .bind(b.checked ? 1 : 0, b.checked ? 1 : 0, b.checked ? 1 : 0, Number(m[1])).run();
     return json({ ok: true });
   }
   return null;
