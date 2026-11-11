@@ -152,6 +152,8 @@
   /* 台風は赤（青い🌀の絵文字を赤っぽく変える） */
   .wx-red { color: #d32f2f; font-weight: 700; }
   .wx-red span, .wx-red i { font-style: normal; filter: hue-rotate(150deg) saturate(2.5); }
+  .tv-min { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 16px; background: #f4f6fa; font-size: 13px; cursor: pointer; }
+  .tv-min:has(#tvMinOn:checked) { background: #e0f4f6; border-color: #10b8c4; }
   .tv-fc { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 10px; background: #fff3e0; color: #c25a00; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: help; }
   #tvModelHead th { cursor: pointer; user-select: none; white-space: nowrap; }
   #tvModelHead th:hover { background: #d5dde8; }
@@ -273,6 +275,7 @@
       <h2 id="tvModelTitle"></h2>
       <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名を押すと、回転率と台粗利の推移のグラフが出ます。</div>
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
+      <label class="tv-min" title="チェックを外すと全部の車を表示します"><input type="checkbox" id="tvMinOn" checked> 月初在庫 <input type="number" id="tvMinN" value="5" min="0" step="1" style="width:52px;padding:2px 4px"> 台以上のみ</label>
       <span class="tv-note" id="wxLegend" style="margin-left:10px"></span>
       <div style="overflow:auto">
         <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
@@ -287,7 +290,9 @@
     </div>
   </div>
   <div id="tvPanel">
-    <div class="bar2"><b id="tvChartTitle">回転率と台粗利の推移</b><span style="flex:1"></span><span id="tvCarSoldTitle"></span></div>
+    <div class="bar2"><b id="tvChartTitle">回転率と台粗利の推移</b>
+      <label style="display:inline-flex;align-items:center;gap:4px"><select id="tvSpan" style="font-size:12px;padding:1px 4px"><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option><option value="12">12</option><option value="0">全部の</option></select>ヶ月分を表示</label>
+      <span style="flex:1"></span><span id="tvCarSoldTitle"></span></div>
     <div class="body" id="tvPanelBody">
       <div id="tvChartBody"><div class="hint" style="padding-top:60px;text-align:center">上の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div></div>
       <div class="sold">

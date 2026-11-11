@@ -81,7 +81,7 @@ async function showModels(month) {
   if (tvSelKey) showCarSold(tvSelKey);
 }
 // 並べ替え（見出しを押すたびに 降順 ⇔ 昇順。値が無いものはいつも最後）
-const tvSort = { key: "rate", dir: "desc" };
+const tvSort = { key: "weather", dir: "desc" }; // はじめは天気の良い順（快晴から）
 $("tvModelHead").addEventListener("click", (e) => {
   const th = e.target.closest("th[data-sort]");
   if (!th) return;
@@ -172,7 +172,7 @@ function sortModels(list) {
     if (va == null) return 1;
     if (vb == null) return -1;
     const c = key === "name" ? String(va).localeCompare(String(vb), "ja") : va - vb;
-    return c * sign || b.sold - a.sold || a.name.localeCompare(b.name, "ja");
+    return c * sign || (key === "weather" ? ((a.rate ?? -1) - (b.rate ?? -1)) * sign : 0) || b.sold - a.sold || a.name.localeCompare(b.name, "ja");
   });
 }
 function drawModels() {
@@ -182,7 +182,8 @@ function drawModels() {
     th.textContent = th.textContent.replace(/ [▼▲]$/, "") + (on ? (tvSort.dir === "desc" ? " ▼" : " ▲") : "");
   });
   const q = $("tvModelFilter").value.trim().normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "");
-  const list = sortModels(tvModels).filter((m) => !q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q));
+  const minOn = $("tvMinOn").checked, minN = Number($("tvMinN").value) || 0;
+  const list = sortModels(tvModels).filter((m) => (!q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q)) && (!minOn || m.opening >= minN));
   $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}" class="${m.key === tvSelKey ? "sel" : ""}">
     <td>${h(m.name)}</td>
     <td class="n">${m.opening.toLocaleString()}台</td>
@@ -195,6 +196,11 @@ function drawModels() {
   </tr>`).join("") || '<tr><td colspan="6" class="tv-dim">該当する車がありません</td></tr>';
 }
 $("tvModelFilter").addEventListener("input", drawModels);
+// 「月初在庫●台以上のみ」（はじめは5台以上だけ表示。変えた値はこのパソコンに覚える）
+try { const v = JSON.parse(localStorage.getItem("tvMin") || "null"); if (v) { $("tvMinOn").checked = !!v.on; $("tvMinN").value = v.n; } } catch {}
+const saveMin = () => { try { localStorage.setItem("tvMin", JSON.stringify({ on: $("tvMinOn").checked, n: Number($("tvMinN").value) || 0 })); } catch {} };
+$("tvMinOn").addEventListener("change", () => { saveMin(); drawModels(); });
+$("tvMinN").addEventListener("input", () => { if (!$("tvMinOn").checked) $("tvMinOn").checked = true; saveMin(); drawModels(); });
 
 $("tvRows").addEventListener("click", async (e) => {
   const sales = e.target.closest("[data-sales]");
@@ -328,7 +334,9 @@ function niceStepAny(range) {
 function modelPoints(key) {
   if (!tvHistory || !tvHistory.models[key]) return [];
   const pts = tvHistory.models[key].points;
-  return tvHistory.months.map((m) => ({ month: m.month, ...(pts[m.month] || { opening: 0, sold: 0, rate: null, gross_avg: null }) }));
+  const span = Number($("tvSpan").value) || 0;
+  const months = [...tvHistory.months].sort((a, b) => a.month.localeCompare(b.month));
+  return (span ? months.slice(-span) : months).map((m) => ({ month: m.month, ...(pts[m.month] || { opening: 0, sold: 0, rate: null, gross_avg: null }) }));
 }
 const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == null ? "—（月初在庫なし）" : pct(p.rate)}</b><br>販売 ${p.sold}台 ÷ 月初在庫 ${p.opening}台<br>平均台粗利 <b>${man1(p.gross_avg)}</b>`;
 
@@ -340,18 +348,6 @@ function showChart(key) {
   document.querySelectorAll("#tvModelRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.key === key));
   $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率と台粗利の推移`;
   drawPanelChart();
-  const tip = $("tvTip");
-  $("tvChartBody").querySelectorAll("svg").forEach((svg) => {
-    svg.addEventListener("mousemove", (e) => {
-      const hit = e.target.closest(".hit");
-      if (!hit) { tip.style.display = "none"; return; }
-      tip.innerHTML = pointText(pts[hit.dataset.i]);
-      tip.style.left = Math.min(e.clientX + 14, innerWidth - 220) + "px";
-      tip.style.top = e.clientY + 14 + "px";
-      tip.style.display = "block";
-    });
-    svg.addEventListener("mouseleave", () => (tip.style.display = "none"));
-  });
   showCarSold(key);
 }
 // 下の枠の大きさに合わせてグラフを描く（枠の位置・大きさは固定）
@@ -361,6 +357,21 @@ function drawPanelChart() {
   if (!pts.length) return;
   box.innerHTML = dualChartSvg(pts, Math.max(320, box.clientWidth), Math.max(200, box.clientHeight));
 }
+// グラフにマウスを当てたときの数字（描き直しても効くよう、枠に1回だけ付ける）
+$("tvChartBody").addEventListener("mousemove", (e) => {
+  const tip = $("tvTip"), hit = e.target.closest(".hit");
+  if (!hit || !tvSelKey) { tip.style.display = "none"; return; }
+  const p = modelPoints(tvSelKey)[hit.dataset.i];
+  if (!p) return;
+  tip.innerHTML = pointText(p);
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - 220) + "px";
+  tip.style.top = Math.min(e.clientY + 14, innerHeight - 110) + "px";
+  tip.style.display = "block";
+});
+$("tvChartBody").addEventListener("mouseleave", () => ($("tvTip").style.display = "none"));
+// 「〇ヶ月分を表示」（はじめは4か月。変えた値はこのパソコンに覚える）
+try { const v = localStorage.getItem("tvSpan"); if (v && [...$("tvSpan").options].some((o) => o.value === v)) $("tvSpan").value = v; } catch {}
+$("tvSpan").onchange = () => { try { localStorage.setItem("tvSpan", $("tvSpan").value); } catch {} drawPanelChart(); };
 addEventListener("resize", () => { if (!$("tab-turnover").hidden) drawPanelChart(); });
 function clearPanel() {
   tvSelKey = null;
