@@ -409,7 +409,7 @@ function clearPanel() {
   tvSelKey = null;
   $("tvChartTitle").textContent = "回転率と台粗利の推移";
   $("tvCarSoldTitle").textContent = ""; $("tvCarSoldNote").textContent = ""; $("tvCarSoldRows").innerHTML = "";
-  $("tvChartBody").innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">下の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div>';
+  $("tvChartBody").innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">右下の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div>';
 }
 
 // その車の、選んでいる月に売れた車の一覧
