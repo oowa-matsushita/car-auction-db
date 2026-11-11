@@ -4,6 +4,7 @@ import { json } from "./util.js";
 // データの値から「確認が必要な車」を見つける。確認済みにした車（review_checked = 1）は出さない。
 export const REVIEW_ADDED_COLUMNS = [
   "ALTER TABLE vehicles ADD COLUMN review_checked INTEGER DEFAULT 0",
+  "CREATE TABLE IF NOT EXISTS crop_regions ( house TEXT NOT NULL, field TEXT NOT NULL, x REAL, y REAL, w REAL, h REAL, updated_at TEXT DEFAULT (datetime('now','localtime')), PRIMARY KEY (house, field) )",
   "CREATE TABLE IF NOT EXISTS price_units ( house TEXT PRIMARY KEY, unit TEXT NOT NULL, source TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
 ];
 
@@ -101,6 +102,25 @@ export async function handleReview(request, env, url) {
       }
     }
     return json({ ok: true, house: v.auction_house, others });
+  }
+  // 出品票の「確認する数字の場所」（会場ごと・項目ごとに覚える。x,y,w,h は向きを直した画像に対する割合 0〜1）
+  if (path === "/api/crop-regions") {
+    if (method === "GET") {
+      const { results } = await db.prepare("SELECT house, field, x, y, w, h FROM crop_regions").all();
+      return json({ regions: results });
+    }
+    if (method === "PUT") {
+      const b = await request.json();
+      const n = (v) => Math.min(1, Math.max(0, Number(v)));
+      if (!b.house || !b.field || ![b.x, b.y, b.w, b.h].every((v) => Number.isFinite(Number(v))) || !(b.w > 0.005 && b.h > 0.005)) return json({ error: "場所が正しくありません" }, 400);
+      await db.prepare("INSERT INTO crop_regions (house, field, x, y, w, h) VALUES (?,?,?,?,?,?) ON CONFLICT(house, field) DO UPDATE SET x=excluded.x, y=excluded.y, w=excluded.w, h=excluded.h, updated_at=datetime('now','localtime')")
+        .bind(String(b.house), String(b.field), n(b.x), n(b.y), n(b.w), n(b.h)).run();
+      return json({ ok: true });
+    }
+    if (method === "DELETE") {
+      await db.prepare("DELETE FROM crop_regions WHERE house = ? AND field = ?").bind(url.searchParams.get("house") || "", url.searchParams.get("field") || "").run();
+      return json({ ok: true });
+    }
   }
   if (path === "/api/price-units" && method === "GET") {
     const { results } = await db.prepare("SELECT * FROM price_units ORDER BY house").all();

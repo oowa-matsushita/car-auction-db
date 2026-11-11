@@ -509,7 +509,7 @@ export default {
       }
 
       // 確認リスト
-      if (path.startsWith("/api/review") || path === "/api/price-units") {
+      if (path.startsWith("/api/review") || path === "/api/price-units" || path === "/api/crop-regions") {
         const res = await handleReview(request, env, url);
         if (res) return res;
       }
