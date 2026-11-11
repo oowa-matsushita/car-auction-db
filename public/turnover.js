@@ -13,6 +13,10 @@ document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => show
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 
 // ---------- 回転率 ----------
+// 数える販売（小売＋業販 / 小売のみ / 業販のみ）。選んだものはこのブラウザに覚えておく
+const tvCh = () => $("tvCh").value;
+try { const v = localStorage.getItem("tvCh"); if (v) $("tvCh").value = v; } catch {}
+$("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch {} $("tvChartCard").hidden = true; loadTurnover(); };
 const yen = (v) => (v == null ? "" : Number(v).toLocaleString() + "円");
 const pct = (r) => (r == null ? "—" : (r * 100).toFixed(1) + "%");
 const monthLabel = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
@@ -23,7 +27,7 @@ async function loadTurnover() {
   loadHistory();
   let data;
   try {
-    const res = await fetch("/api/turnover");
+    const res = await fetch("/api/turnover?ch=" + tvCh());
     data = await res.json();
     if (!res.ok) throw new Error(data.error || res.status);
   } catch (e) { tvLog("❌ 読み込みに失敗しました: " + e.message); return; }
@@ -35,7 +39,8 @@ async function loadTurnover() {
       <td><b>${monthLabel(m.month)}</b></td>
       <td class="n">${m.item_count == null ? '<span class="tv-dim">未登録</span>' : m.item_count.toLocaleString() + "台"}</td>
       <td class="n">${m.sold == null ? '<span class="tv-dim">未登録</span>'
-        : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold.toLocaleString()}台</span>`}</td>
+        : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold.toLocaleString()}台</span>`
+          + (m.sold_retail || m.sold_wholesale ? `<div class="tv-dim" style="font-size:11px">小売 ${m.sold_retail} / 業販 ${m.sold_wholesale}</div>` : "")}</td>
       <td class="n tv-rate">${pct(m.rate)}</td>
       <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / maxRate) * 150)}px"></div></td>
       <td style="white-space:nowrap">${m.item_count == null ? "" : `<button class="btn btn-sub" data-del="${m.month}" style="padding:2px 6px">在庫</button>`}
@@ -51,7 +56,7 @@ async function loadTurnover() {
 async function showModels(month) {
   tvMonth = month;
   document.querySelectorAll("#tvRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.month === month));
-  const res = await fetch(`/api/turnover/${month}/models`);
+  const res = await fetch(`/api/turnover/${month}/models?ch=${tvCh()}`);
   const j = await res.json();
   if (!res.ok) return tvLog("❌ " + (j.error || "読み込みに失敗しました"));
   tvModels = j.models;
@@ -119,7 +124,7 @@ $("tvRows").addEventListener("click", async (e) => {
 });
 
 async function showSales(month) {
-  const res = await fetch(`/api/turnover/${month}/sales`);
+  const res = await fetch(`/api/turnover/${month}/sales?ch=${tvCh()}`);
   const j = await res.json();
   if (!res.ok) return alert(j.error || "読み込みに失敗しました");
   $("tvSoldTitle").textContent = `${monthLabel(month)}の販売データ（契約日付が${monthLabel(month)}の車）：${j.rows.length}台`;
@@ -150,7 +155,8 @@ async function importInventory(files) {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.status);
       if (j.kind === "sales") {
-        tvLog(`✅ 販売データを取り込みました（${Object.entries(j.months).map(([m, n]) => `${monthLabel(m)} ${n.toLocaleString()}台`).join("、")}）`);
+        tvLog(`✅ 販売データを取り込みました（${Object.entries(j.months).map(([m, n]) => `${monthLabel(m)} ${n.toLocaleString()}件`).join("、")}）`
+          + (j.channels ? `　小売 ${j.channels.retail}台・業販 ${j.channels.wholesale}台・数えない ${j.channels.exclude}台` : ""));
       } else {
         tvLog(`✅ ${monthLabel(j.month)}の月初在庫 ${j.count.toLocaleString()}台を取り込みました`);
       }
@@ -163,7 +169,7 @@ dropZone($("dropInv"), $("inInv"), importInventory);
 // ---------- 回転率の推移グラフ（折れ線：その車＝実線、全体＝点線） ----------
 let tvHistory = null;
 async function loadHistory() {
-  try { tvHistory = await (await fetch("/api/turnover/history")).json(); } catch { tvHistory = null; }
+  try { tvHistory = await (await fetch("/api/turnover/history?ch=" + tvCh())).json(); } catch { tvHistory = null; }
 }
 const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", AVG = "#8a94a6";
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
@@ -286,7 +292,7 @@ async function showCarSold(key) {
   const month = tvMonth;
   $("tvCarSoldTitle").textContent = `${monthLabel(month)}に売れた ${tvHistory.models[key]?.name || ""}`;
   $("tvCarSoldRows").innerHTML = '<tr><td colspan="7" class="tv-dim">読み込み中…</td></tr>';
-  const res = await fetch(`/api/turnover/${month}/model-sales?key=${encodeURIComponent(key)}`);
+  const res = await fetch(`/api/turnover/${month}/model-sales?ch=${tvCh()}&key=${encodeURIComponent(key)}`);
   const j = await res.json();
   if (!res.ok) { $("tvCarSoldRows").innerHTML = `<tr><td colspan="7">${h(j.error || "読み込みに失敗しました")}</td></tr>`; return; }
   $("tvCarSoldTitle").textContent += `：${j.rows.length}台`;

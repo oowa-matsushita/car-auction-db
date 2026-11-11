@@ -8,6 +8,8 @@ import { json, parseDelimited } from "./util.js";
 export const TURNOVER_ADDED_COLUMNS = [
   "ALTER TABLE sales_items ADD COLUMN stock_no TEXT",
   "ALTER TABLE sales_items ADD COLUMN chassis_no TEXT",
+  "ALTER TABLE sales_items ADD COLUMN customer TEXT",
+  "ALTER TABLE sales_items ADD COLUMN channel TEXT",
 ];
 
 export const TURNOVER_SCHEMA = [
@@ -62,15 +64,41 @@ const toInt = (x) => {
 // 在庫No・車台番号の列があれば、月初在庫や仕入れ台帳とつなぐのに使う。
 const SALES_FIELDS = {
   slip_no: ["伝票No", "伝票NO", "伝票番号"],
-  contract_date: ["契約日付", "契約日"],
+  contract_date: ["契約日付", "契約日", "日付"],
   delivery_date: ["納車日", "納車日付"],
-  car_name: ["車名"],
-  price: ["車両本体価格", "本体価格"],
+  car_name: ["愛称名", "車名"], // 新しい形式では「車名」はメーカー名なので「愛称名」を優先
+  price: ["車両本体価格", "車輛本体価格", "本体価格"],
+  customer: ["顧客名"],
+  fees: ["販売諸費用計"],
   discount: ["車両本体値引", "値引"],
   sales_amount: ["売上高"],
   stock_no: ["在庫No", "在庫NO", "在庫番号"],
   chassis_no: ["車台番号"],
 };
+// ---- 販売の区分（小売 / 業販 / 数えない） ----
+// 顧客名で決める。名前はスペースを除いて比べる。
+const SALES_RULES = {
+  exclude: ["(株)USS静岡", "株式会社ジェイボーイ", "国際オートパーツ株式会社"], // 数えない
+  wholesale: ["株式会社オートサーバー", "株式会社オークネット"],                // 業販
+  retail: ["神戸晋也"],                                                        // 諸費用0円でも小売にする
+};
+const nameKey = (v) => clean(v).replace(/\s/g, "");
+export function salesChannel(r) {
+  const c = nameKey(r.customer);
+  if (!c) return null; // 顧客名の無い古い形式は区分なし（すべて数える）
+  if (SALES_RULES.exclude.map(nameKey).includes(c)) return "exclude";
+  if (SALES_RULES.retail.map(nameKey).includes(c)) return "retail";
+  if (SALES_RULES.wholesale.map(nameKey).includes(c)) return "wholesale";
+  if (r.fees === 0) return "wholesale"; // 販売諸費用0円＝業者向け
+  return "retail";
+}
+// 回転率で数える販売の条件（ch: all=小売+業販 / retail / wholesale）
+export function channelSql(ch) {
+  if (ch === "retail") return "AND COALESCE(channel,'retail') = 'retail'";
+  if (ch === "wholesale") return "AND channel = 'wholesale'";
+  return "AND COALESCE(channel,'') <> 'exclude'";
+}
+
 function parseSales(rows) {
   const iNo = rows[0].map(clean).findIndex((h) => SALES_FIELDS.slip_no.includes(h));
   const iDate = rows[0].map(clean).findIndex((h) => SALES_FIELDS.contract_date.includes(h));
@@ -81,7 +109,10 @@ function parseSales(rows) {
   for (let ri = 0; ri < hdrN; ri++) {
     rows[ri].forEach((h, ci) => {
       h = clean(h);
-      for (const [f, names] of Object.entries(SALES_FIELDS)) if (!pos[f] && names.includes(h)) pos[f] = [ri, ci];
+      for (const [f, names] of Object.entries(SALES_FIELDS)) {
+        const rank = names.indexOf(h);
+        if (rank >= 0 && (!pos[f] || rank < pos[f][2])) pos[f] = [ri, ci, rank];
+      }
     });
   }
   const recs = [];
@@ -93,6 +124,7 @@ function parseSales(rows) {
       slip_no: clean(get("slip_no")), contract_date: toDate(get("contract_date")), delivery_date: toDate(get("delivery_date")),
       car_name: clean(get("car_name")), price: toInt(get("price")), discount: toInt(get("discount")), sales_amount: toInt(get("sales_amount")),
       stock_no: clean(get("stock_no")), chassis_no: clean(get("chassis_no")),
+      customer: clean(get("customer")), fees: pos.fees ? toInt(get("fees")) : null,
     });
   }
   return recs;
@@ -155,12 +187,15 @@ export async function handleTurnover(request, env, url) {
   const path = url.pathname, method = request.method, db = env.DB;
 
   // 月ごとの一覧
+  const ch = url.searchParams.get("ch") || "all";
   if (path === "/api/turnover" && method === "GET") {
     // 月初在庫か販売データのどちらかがある月を並べる
     const { results: months } = await db.prepare(`
       WITH ms AS (SELECT month FROM inv_months UNION SELECT DISTINCT month FROM sales_items)
       SELECT ms.month, m.filename, m.item_count,
-        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month) AS sold
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)}) AS sold,
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'retail') AS sold_retail,
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'wholesale') AS sold_wholesale
       FROM ms LEFT JOIN inv_months m ON m.month = ms.month
       ORDER BY ms.month DESC`).all();
     for (const m of months) {
@@ -178,7 +213,7 @@ export async function handleTurnover(request, env, url) {
     const head = rows[0].map(clean);
 
     // 販売データCSV なら契約日付の月ごとに入れ替える
-    if (head.includes("伝票No") && head.includes("契約日付")) {
+    if (head.includes("伝票No") && (head.includes("契約日付") || head.includes("日付"))) {
       const recs = parseSales(rows);
       if (!recs.length) return json({ error: "販売データの行が見つかりません" }, 400);
       const byMonth = {};
@@ -188,13 +223,15 @@ export async function handleTurnover(request, env, url) {
       for (const [mo, list] of Object.entries(byMonth)) {
         stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ?").bind(mo));
         for (const r of list) {
-          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no));
+          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r)));
         }
       }
       for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));
       const linked = recs.filter((r) => r.stock_no || r.chassis_no).length;
-      return json({ ok: true, kind: "sales", linked, months: Object.fromEntries(Object.entries(byMonth).map(([k, v]) => [k, v.length])), count: recs.length });
+      const chCount = { retail: 0, wholesale: 0, exclude: 0 };
+      for (const r of recs) { const c = salesChannel(r); if (c) chCount[c]++; }
+      return json({ ok: true, kind: "sales", linked, channels: recs.some((r) => r.customer) ? chCount : null, months: Object.fromEntries(Object.entries(byMonth).map(([k, v]) => [k, v.length])), count: recs.length });
     }
 
     if (!MONTH_RE.test(month)) return json({ error: "何月の在庫か分かりません。ファイル名に年月（例: 202610）を入れるか、「月」を選んでください" }, 400);
@@ -230,7 +267,7 @@ export async function handleTurnover(request, env, url) {
   if (mm && method === "GET") {
     const month = mm[1];
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-    const { results: sold } = await db.prepare("SELECT car_name FROM sales_items WHERE month = ?").bind(month).all();
+    const { results: sold } = await db.prepare(`SELECT car_name FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
     const models = groupModels(stock, sold);
     models.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.sold - a.sold || a.name.localeCompare(b.name, "ja"));
     return json({ month, opening: stock.length, sold: sold.length, models });
@@ -244,7 +281,7 @@ export async function handleTurnover(request, env, url) {
     const out = { months: [], models: {} };
     for (const { month } of months) {
       const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-      const { results: sold } = await db.prepare("SELECT car_name FROM sales_items WHERE month = ?").bind(month).all();
+      const { results: sold } = await db.prepare(`SELECT car_name FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
       out.months.push({ month, opening: stock.length, sold: sold.length, rate: stock.length ? sold.length / stock.length : null });
       for (const g of groupModels(stock, sold)) {
         const m = (out.models[g.key] ||= { name: g.name, points: {} });
@@ -258,7 +295,7 @@ export async function handleTurnover(request, env, url) {
   const ms = path.match(/^\/api\/turnover\/(\d{4}-\d{2})\/model-sales$/);
   if (ms && method === "GET") {
     const month = ms[1], key = url.searchParams.get("key") || "";
-    const { results } = await db.prepare("SELECT * FROM sales_items WHERE month = ? ORDER BY contract_date, slip_no").bind(month).all();
+    const { results } = await db.prepare(`SELECT * FROM sales_items WHERE month = ? ${channelSql(ch)} ORDER BY contract_date, slip_no`).bind(month).all();
     const list = results.filter((r) => modelKey(r.car_name) === key);
     const out = [];
     for (const r of list) {

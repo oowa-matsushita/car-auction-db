@@ -232,6 +232,8 @@
     <label class="drop" id="dropInv">📥 月初在庫・販売データのCSVをドロップ / クリック（複数可）
       <input type="file" id="inInv" accept=".csv,.tsv,.txt" multiple hidden></label>
     <span style="font-size:12px;color:#c9e6ee">月</span><input type="month" id="invMonth" title="ファイル名に年月（例: 202610）が無いときに使います">
+    <span style="font-size:12px;color:#c9e6ee">数える販売</span>
+    <select id="tvCh"><option value="all">小売＋業販</option><option value="retail">小売のみ</option><option value="wholesale">業販のみ</option></select>
     <div id="tvLog" style="font-size:12px;color:#ffe9a8"></div>
   </div>
   <div class="tv-wrap">
