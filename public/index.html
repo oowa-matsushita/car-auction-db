@@ -154,7 +154,7 @@
   .wx-red span, .wx-red i { font-style: normal; filter: hue-rotate(150deg) saturate(2.5); }
   .tv-min { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 16px; background: #f4f6fa; font-size: 13px; cursor: pointer; }
   .tv-min:has(#tvMinOn:checked) { background: #e0f4f6; border-color: #10b8c4; }
-  .tv-fc { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 10px; background: #fff3e0; color: #c25a00; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: help; }
+  .tv-fc { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fff3e0; color: #c25a00; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: help; }
   #tvModelHead th { cursor: pointer; user-select: none; white-space: nowrap; }
   #tvModelHead th:hover { background: #d5dde8; }
   #tvModelHead th.on { background: #ffe08f; }
@@ -280,7 +280,7 @@
       <div class="tv-note">回転率 ＝ その月の販売台数（販売データの契約日付の月で数える）÷ 月初在庫。月を押すと、下に車名ごとの回転率が出ます。</div>
       <div style="overflow:auto;margin-top:8px">
         <table class="tv-table">
-          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>平均台粗利</th><th style="width:160px"></th><th>削除</th></tr></thead>
+          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th title="当月だけ。月末までの販売を、残りの平日・土日祝の日数から予想">着地予想</th><th>平均台粗利</th><th style="width:160px"></th><th>削除</th></tr></thead>
           <tbody id="tvRows"></tbody>
         </table>
       </div>
@@ -293,7 +293,7 @@
       <label class="tv-min" title="チェックを外すと全部の車を表示します"><input type="checkbox" id="tvMinOn" checked> 月初在庫 <input type="number" id="tvMinN" value="5" min="0" step="1" style="width:52px;padding:2px 4px"> 台以上のみ</label>
       <span class="tv-note" id="wxLegend" style="margin-left:10px"></span>
       <div style="overflow:auto">
-        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
+        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="forecast" id="tvFcHead" hidden>着地予想</th><th data-sort="gross_avg">平均台粗利</th><th data-sort="weather">天気</th></tr></thead>
         <tbody id="tvModelRows"></tbody></table>
       </div>
     </div>

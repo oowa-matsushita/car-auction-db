@@ -29,7 +29,8 @@ const tvLog = (s) => ($("tvLog").textContent = s);
 let tvMonth = null, tvModels = [], tvForecast = null, tvSelKey = null;
 // 当月の着地予想（回転率の右に出す）
 const fcTitle = (f) => `${f.through.slice(5).replace("-", "/")}までの販売から予想。残り 平日${f.rest_weekday}日・土日祝${f.rest_off}日（土日祝は平日の${f.ratio}倍売れる計算。過去の販売データから）`;
-const fcHtml = (rate, f) => (rate == null || !f ? "" : `<span class="tv-fc" title="${fcTitle(f)}">着地予想 ${pct(rate * f.factor)}</span>`);
+const fcHtml = (rate, f) => (rate == null || !f ? '<span class="tv-dim">—</span>' : `<span class="tv-fc" title="${fcTitle(f)}">${pct(rate * f.factor)}</span>`);
+const fcOn = () => !!(tvForecast && tvForecast.month === tvMonth);
 // 条件を続けて変えたとき、古い結果で上書きしないよう、最新の読み込みだけを使う
 let tvLoadSeq = 0, tvModelSeq = 0;
 async function loadTurnover() {
@@ -53,7 +54,8 @@ async function loadTurnover() {
       <td class="n">${m.sold == null ? '<span class="tv-dim">未登録</span>'
         : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold.toLocaleString()}台</span>`
           + (m.sold_retail || m.sold_wholesale ? `<div class="tv-dim" style="font-size:11px">小売 ${m.sold_retail} / 業販 ${m.sold_wholesale}</div>` : "")}</td>
-      <td class="n tv-rate">${pct(m.rate)}${tvForecast && tvForecast.month === m.month ? fcHtml(m.rate, tvForecast) + `<div class="tv-dim" style="font-size:11px;font-weight:400">販売 ${tvForecast.sold.toLocaleString()}台の見込み</div>` : ""}</td>
+      <td class="n tv-rate">${pct(m.rate)}</td>
+      <td class="n">${tvForecast && tvForecast.month === m.month ? fcHtml(m.rate, tvForecast) + `<div class="tv-dim" style="font-size:11px;font-weight:400">販売 ${tvForecast.sold.toLocaleString()}台の見込み</div>` : ""}</td>
       <td class="n"><b>${man1(m.gross_avg)}</b>${m.gross_total != null ? `<div class="tv-dim" style="font-size:11px">合計 ${Math.round(m.gross_total / 10000).toLocaleString()}万円</div>` : ""}</td>
       <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / maxRate) * 150)}px"></div></td>
       <td style="white-space:nowrap">${m.item_count == null ? "" : `<button class="btn btn-sub" data-del="${m.month}" style="padding:2px 6px">在庫</button>`}
@@ -166,7 +168,7 @@ loadWx();
 function sortModels(list) {
   const { key, dir } = tvSort, sign = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
-    const val = (m) => (key === "weather" ? weatherOf(m)?.score ?? null : m[key]);
+    const val = (m) => (key === "weather" ? weatherOf(m)?.score ?? null : key === "forecast" ? m.rate : m[key]);
     const va = val(a), vb = val(b);
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
@@ -182,18 +184,20 @@ function drawModels() {
     th.textContent = th.textContent.replace(/ [▼▲]$/, "") + (on ? (tvSort.dir === "desc" ? " ▼" : " ▲") : "");
   });
   const q = $("tvModelFilter").value.trim().normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "");
+  $("tvFcHead").hidden = !fcOn();
   const minOn = $("tvMinOn").checked, minN = Number($("tvMinN").value) || 0;
   const list = sortModels(tvModels).filter((m) => (!q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q)) && (!minOn || m.opening >= minN));
   $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}" class="${m.key === tvSelKey ? "sel" : ""}">
     <td>${h(m.name)}</td>
     <td class="n">${m.opening.toLocaleString()}台</td>
     <td class="n">${m.sold.toLocaleString()}台</td>
-    <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate) + (tvForecast && tvForecast.month === tvMonth ? fcHtml(m.rate, tvForecast) : "")}</td>
+    <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
+    ${fcOn() ? `<td class="n">${fcHtml(m.rate, tvForecast)}</td>` : ""}
     <td class="n">${man1(m.gross_avg)}</td>
     ${(() => { const w = weatherOf(m); return w
       ? `<td class="tv-wx${w.label === "台風" ? " wx-red" : ""}" title="${w.label}（回転率${rateScore(m.rate)}点＋台粗利${grossScore(m.gross_avg)}点＝${w.score}点）"><span>${w.icon}</span>${w.label}</td>`
       : '<td class="tv-wx tv-dim" title="月初在庫か台粗利が無いため判定できません">—</td>'; })()}
-  </tr>`).join("") || '<tr><td colspan="6" class="tv-dim">該当する車がありません</td></tr>';
+  </tr>`).join("") || '<tr><td colspan="7" class="tv-dim">該当する車がありません</td></tr>';
 }
 $("tvModelFilter").addEventListener("input", drawModels);
 // 「月初在庫●台以上のみ」（はじめは5台以上だけ表示。変えた値はこのパソコンに覚える）
