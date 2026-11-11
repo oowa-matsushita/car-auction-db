@@ -99,9 +99,17 @@ export function salesChannel(r) {
 }
 // 回転率で数える販売の条件（ch: all=小売+業販 / retail / wholesale）
 // 台粗利 ＝ 本体価格（税抜）− 本体原価 − 1台あたりの経費（陸送など 税込3.3万円 ＝ 税抜3万円）
-export const GROSS_EXPENSE_IN = 33000, GROSS_EXPENSE_EX = 30000;
-export const grossSql = (tax) => (tax === "in" ? `(price - cost - ${GROSS_EXPENSE_IN})` : `(ROUND(price / 1.1) - cost - ${GROSS_EXPENSE_EX})`);
-export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? r.price - r.cost - GROSS_EXPENSE_IN : Math.round(r.price / 1.1) - r.cost - GROSS_EXPENSE_EX) : null);
+// 経費は「設定」画面で決める（万円。はじめは3.5万円）。台粗利（税抜）からそのまま引く
+export const EXPENSE_DEFAULT_MAN = 3.5;
+let expenseYen = EXPENSE_DEFAULT_MAN * 10000;
+async function loadExpense(db) {
+  const r = await db.prepare("SELECT value FROM app_settings WHERE key = 'weather'").first().catch(() => null);
+  const v = r ? Number(JSON.parse(r.value).expense) : NaN;
+  expenseYen = Math.round((Number.isFinite(v) && v >= 0 ? v : EXPENSE_DEFAULT_MAN) * 10000);
+}
+const expIn = () => Math.round(expenseYen * 1.1);
+export const grossSql = (tax) => (tax === "in" ? `(price - cost - ${expIn()})` : `(ROUND(price / 1.1) - cost - ${expenseYen})`);
+export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? r.price - r.cost - expIn() : Math.round(r.price / 1.1) - r.cost - expenseYen) : null);
 export function channelSql(ch) {
   if (ch === "retail") return "AND COALESCE(channel,'retail') = 'retail'";
   if (ch === "wholesale") return "AND channel = 'wholesale'";
@@ -204,6 +212,7 @@ export async function handleTurnover(request, env, url) {
   // 月ごとの一覧
   const ch = url.searchParams.get("ch") || "all";
   const tax = url.searchParams.get("tax") === "in" ? "in" : "ex";
+  if (path.startsWith("/api/turnover")) await loadExpense(db);
   // 天気マークの基準（みんなで共通）
   if (path === "/api/settings/weather") {
     if (method === "GET") {
@@ -218,6 +227,8 @@ export async function handleTurnover(request, env, url) {
       const v = { rate: b.rate.map(Number), gross: b.gross.map(Number), levels: b.levels.map(Number) };
       // グラフの上限（回転率 %・台粗利 万円）。無ければ はじめの値（80% / 40万円）
       if (b.chart && Number(b.chart.rate) > 0 && Number(b.chart.gross) > 0) v.chart = { rate: Number(b.chart.rate), gross: Number(b.chart.gross) };
+      // 1台あたりの経費（万円）。台粗利から引く
+      if (b.expense !== undefined && b.expense !== null && Number.isFinite(Number(b.expense)) && Number(b.expense) >= 0) v.expense = Number(b.expense);
       await db.prepare("INSERT INTO app_settings (key, value) VALUES ('weather', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')").bind(JSON.stringify(v)).run();
       return json({ ok: true, weather: v });
     }

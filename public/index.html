@@ -70,6 +70,32 @@
   #tvModelRows tr.sel td { background: #ffe9a8 !important; }
   /* ---- 確認リスト ---- */
   #tab-review { flex: 1; min-height: 0; display: flex; }
+  /* 設定画面 */
+  #wxDlg { width: min(760px, 96vw); border-radius: 10px; }
+  #wxDlg .hd { padding: 8px 14px; }
+  #wxDlg .hd b { font-size: 15px; }
+  .wx-body { padding: 12px 18px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .wx-body section { border: 1px solid #dde3ec; border-radius: 8px; padding: 10px 14px; background: #fafbfd; }
+  .wx-body h3 { margin: 0 0 8px; font-size: 14px; color: #13234a; }
+  .wx-body input[type=number] { height: 28px; padding: 2px 6px; font-size: 14px; font-weight: 700; text-align: right; border: 1px solid #b9c3d1; border-radius: 5px; background: #fff; }
+  .wx-formula { font-size: 14px; padding: 6px 0; }
+  .wx-formula .hl { background: #fff3e0; border: 1px solid #f0c08a; border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+  .wx-grid { border-collapse: collapse; font-size: 13px; }
+  .wx-grid th, .wx-grid td { border: 1px solid #dde3ec; padding: 5px 10px; text-align: center; background: #fff; white-space: nowrap; }
+  .wx-grid thead th { background: #e9eef5; }
+  .wx-grid tbody th { background: #e9eef5; text-align: left; }
+  .wx-grid td.dim { color: #8a93a3; }
+  .wx-levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .wx-levels .lv { background: #fff; border: 1px solid #dde3ec; border-radius: 8px; padding: 6px 4px; text-align: center; }
+  .wx-levels .lv.bad { border-color: #f1b3b3; background: #fff6f6; }
+  .wx-levels .ic { font-size: 26px; line-height: 1.2; }
+  .wx-levels .ic i { font-style: normal; }
+  .wx-levels .nm { font-weight: 700; font-size: 13px; }
+  .wx-levels .lv.bad .nm { color: #d32f2f; }
+  .wx-levels .th { font-size: 12px; color: #556; margin-top: 3px; }
+  .wx-row { font-size: 14px; }
+  .wx-err { color: #c62828; font-weight: 700; min-height: 1.2em; font-size: 13px; }
+  .wx-foot { display: flex; align-items: center; gap: 8px; }
   .rv-badge { background: var(--orange); color: #fff; border-radius: 9px; padding: 0 6px; font-size: 11px; margin-left: 2px; }
   .rv-badge:empty { display: none; }
   .rv-left { width: 460px; min-width: 340px; display: flex; flex-direction: column; border-right: 2px solid var(--line); background: #fff; }
@@ -365,7 +391,7 @@
     <table><thead id="tvSoldHead"></thead><tbody id="tvSoldRows"></tbody></table>
   </div>
 </dialog>
-<dialog id="wxDlg" style="width:min(820px,96vw)"><form method="dialog" id="wxForm"></form></dialog>
+<dialog id="wxDlg"><form method="dialog" id="wxForm"></form></dialog>
 
 <script>
 "use strict";

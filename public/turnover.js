@@ -128,6 +128,7 @@ $("tvModelHead").addEventListener("click", (e) => {
 // levels：快晴/晴れ/曇り/雨 になる合計点の下限（それ未満は台風）
 const WX_DEFAULT = { rate: [40, 35, 30], gross: [15, 10, 5], levels: [6, 4, 3, 1] };
 const CHART_DEFAULT = { rate: 80, gross: 40 }; // グラフの上限（回転率 %・台粗利 万円）
+const EXPENSE_DEFAULT = 3.5; // 1台あたりの経費（万円）。台粗利から引く
 let wxCfg = { ...structuredClone(WX_DEFAULT), chart: { ...CHART_DEFAULT } };
 const WX_LOOK = [["🌞", "快晴"], ["🌤️", "晴れ"], ["☁️", "曇り"], ["🌧️", "雨"], ["🌀", "台風"]];
 const stepScore = (v, cuts) => { const i = cuts.findIndex((c) => v >= c); return i < 0 ? 0 : 3 - i; };
@@ -156,45 +157,62 @@ async function loadWx() {
   if (typeof drawPanelChart === "function") drawPanelChart();
 }
 function openWx() {
-  const c = wxCfg, inp = (id, v, step) => `<input id="${id}" type="number" step="${step}" value="${v}" style="width:64px;padding:2px 6px">`;
-  $("wxForm").innerHTML = `<div class="hd"><b>設定（天気の基準・グラフの上限）</b><span style="flex:1"></span></div>
-    <div style="padding:14px 18px;line-height:2.2">
-      <div style="font-weight:700">回転率</div>
-      3点：${inp("wxR0", c.rate[0], 0.1)}% 以上　2点：${inp("wxR1", c.rate[1], 0.1)}% 以上　1点：${inp("wxR2", c.rate[2], 0.1)}% 以上　（それ未満は0点）
-      <div style="font-weight:700;margin-top:6px">平均台粗利</div>
-      3点：${inp("wxG0", c.gross[0], 0.1)}万円 以上　2点：${inp("wxG1", c.gross[1], 0.1)}万円 以上　1点：${inp("wxG2", c.gross[2], 0.1)}万円 以上　（それ未満は0点）
-      <div style="font-weight:700;margin-top:6px">天気（2つの点数の合計 0〜6点）</div>
-      🌞快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は<span class="wx-red"><i>🌀</i>台風</span>）
-      <div style="font-weight:700;margin-top:10px;padding-top:8px;border-top:1px solid #e3e8ef">グラフの上限（どの車でも同じ目盛り）</div>
-      回転率：${inp("wxCR", c.chart.rate, 5)}% まで　平均台粗利：${inp("wxCG", c.chart.gross, 5)}万円 まで　<span class="tv-note">（超える値は端に▲で表示）</span>
-      <div id="wxErr" style="color:#c62828;min-height:1.5em"></div>
-      <div style="display:flex;gap:8px">
-        <button type="button" class="btn btn-ok" id="wxSave">保存</button>
-        <button type="button" class="btn btn-sub" id="wxReset">はじめの基準に戻す</button>
-        <span style="flex:1"></span>
-        <button type="button" class="btn btn-sub" id="wxClose">閉じる ✕</button>
+  const c = wxCfg, ch = c.chart || CHART_DEFAULT, exp = c.expense ?? EXPENSE_DEFAULT;
+  const inp = (id, v, step, w = 64) => `<input id="${id}" type="number" step="${step}" min="0" value="${v}" style="width:${w}px">`;
+  const lv = (i, icon, label, cls = "") => `<div class="lv ${cls}"><div class="ic">${icon}</div><div class="nm">${label}</div>${i == null ? '<div class="th">それ未満</div>' : `<div class="th">${inp("wxL" + i, c.levels[i], 1, 52)}点以上</div>`}</div>`;
+  $("wxForm").innerHTML = `<div class="hd"><b>⚙ 回転率の設定</b><span style="flex:1"></span><button type="button" class="btn btn-sub" id="wxClose" style="padding:2px 10px">閉じる ✕</button></div>
+    <div class="wx-body">
+      <section>
+        <h3>💰 台粗利の計算</h3>
+        <div class="wx-formula">台粗利 ＝ 本体価格（税抜） − 本体原価 − <span class="hl">経費 ${inp("wxExp", exp, 0.1, 70)} 万円</span></div>
+        <div class="tv-note">経費は1台あたり（陸送など）。台粗利からそのまま引きます。</div>
+      </section>
+      <section>
+        <h3>🌤️ 天気の基準</h3>
+        <div class="tv-note" style="margin-bottom:6px">① 回転率と平均台粗利に、それぞれ 0〜3点を付けます</div>
+        <table class="wx-grid">
+          <thead><tr><th></th><th>3点</th><th>2点</th><th>1点</th><th>0点</th></tr></thead>
+          <tbody>
+            <tr><th>回転率</th><td>${inp("wxR0", c.rate[0], 0.1)}%以上</td><td>${inp("wxR1", c.rate[1], 0.1)}%以上</td><td>${inp("wxR2", c.rate[2], 0.1)}%以上</td><td class="dim">それ未満</td></tr>
+            <tr><th>平均台粗利</th><td>${inp("wxG0", c.gross[0], 0.1)}万円以上</td><td>${inp("wxG1", c.gross[1], 0.1)}万円以上</td><td>${inp("wxG2", c.gross[2], 0.1)}万円以上</td><td class="dim">それ未満</td></tr>
+          </tbody>
+        </table>
+        <div class="tv-note" style="margin:10px 0 6px">② 2つの点数の合計（0〜6点）で天気が決まります</div>
+        <div class="wx-levels">${lv(0, "🌞", "快晴")}${lv(1, "🌤️", "晴れ")}${lv(2, "☁️", "曇り")}${lv(3, "🌧️", "雨")}${lv(null, "<span class='wx-red'><i>🌀</i></span>", "台風", "bad")}</div>
+      </section>
+      <section>
+        <h3>📈 グラフの上限 <span class="tv-note" style="font-weight:400">（どの車でも同じ目盛り。超える値は端に▲で表示）</span></h3>
+        <div class="wx-row">回転率 ${inp("wxCR", ch.rate, 5)} %まで　　平均台粗利 ${inp("wxCG", ch.gross, 5)} 万円まで</div>
+      </section>
+      <div id="wxErr" class="wx-err"></div>
+      <div class="wx-foot">
+        <button type="button" class="btn btn-ok" id="wxSave" style="padding:6px 22px;font-size:14px">保存</button>
+        <button type="button" class="btn btn-sub" id="wxReset">はじめの設定に戻す</button>
+        <span style="flex:1"></span><span class="tv-note">保存した設定は、このサイトを見る全員で共通です。</span>
       </div>
-      <div class="tv-note">保存した基準は、このサイトを見る全員で共通です。</div>
     </div>`;
-  const v = (id) => Number($(id).value);
+  const v = (id) => ($(id).value.trim() === "" ? NaN : Number($(id).value));
   $("wxClose").onclick = () => $("wxDlg").close();
   $("wxReset").onclick = async () => {
-    if (!confirm("はじめの基準（回転率40/35/30%、台粗利15/10/5万円、快晴6・晴れ4・曇り3・雨1点、グラフの上限 80%・40万円）に戻しますか？")) return;
+    if (!confirm(`はじめの設定に戻しますか？\n（経費 ${EXPENSE_DEFAULT}万円、回転率 40/35/30%、台粗利 15/10/5万円、快晴6・晴れ4・曇り3・雨1点、グラフの上限 80%・40万円）`)) return;
     await fetch("/api/settings/weather", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ reset: true }) });
-    $("wxDlg").close(); loadWx();
+    $("wxDlg").close(); await loadWx(); loadTurnover();
   };
   $("wxSave").onclick = async () => {
-    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") } };
+    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") }, expense: v("wxExp") };
     const desc = (a) => a.every((x, i) => i === 0 || a[i - 1] > x);
-    const err = [...b.rate, ...b.gross, ...b.levels, b.chart.rate, b.chart.gross].some((x) => !Number.isFinite(x)) ? "空欄があります"
+    const err = [...b.rate, ...b.gross, ...b.levels, b.chart.rate, b.chart.gross, b.expense].some((x) => !Number.isFinite(x)) ? "空欄があります"
+      : b.expense < 0 ? "経費は 0 以上にしてください"
       : !(b.chart.rate > 0 && b.chart.gross > 0) ? "グラフの上限は 0 より大きい数を入れてください"
       : !desc(b.rate) ? "回転率は 3点 ＞ 2点 ＞ 1点 の順に大きくしてください"
       : !desc(b.gross) ? "台粗利は 3点 ＞ 2点 ＞ 1点 の順に大きくしてください"
       : !desc(b.levels) || b.levels[0] > 6 || b.levels[3] < 0 ? "天気の点数は 快晴 ＞ 晴れ ＞ 曇り ＞ 雨 の順に、0〜6点の間で入れてください" : "";
-    if (err) { $("wxErr").textContent = err; return; }
+    if (err) { $("wxErr").textContent = "⚠ " + err; return; }
     const res = await fetch("/api/settings/weather", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
-    if (!res.ok) { $("wxErr").textContent = (await res.json().catch(() => ({}))).error || "保存できませんでした"; return; }
-    $("wxDlg").close(); loadWx();
+    if (!res.ok) { $("wxErr").textContent = "⚠ " + ((await res.json().catch(() => ({}))).error || "保存できませんでした"); return; }
+    const expChanged = b.expense !== (wxCfg.expense ?? EXPENSE_DEFAULT);
+    $("wxDlg").close(); await loadWx();
+    if (expChanged) { tvHistory = null; loadTurnover(); } // 台粗利を計算し直す
   };
   $("wxDlg").showModal();
 }
