@@ -53,7 +53,7 @@ function selectReview(id, scroll) {
   $("rvForm").innerHTML = `<div class="rv-issues">⚠ ${r.issues.map(h).join("　⚠ ")}${r.review_reason ? `<span style="color:#667">　（メモ：${h(r.review_reason)}）</span>` : ""}</div>` +
     RV_FIELDS.map(([k, l, key, wide]) => `<label class="${key ? "key" : ""} ${wide ? "wide" : ""}">${l}<input data-f="${k}" value="${h(r[k] ?? "")}"></label>`).join("") +
     `<button class="btn btn-ok" id="rvSave">保存</button>
-     ${r.kind === "price" && r.bid_price_man >= 100 ? `<button class="btn btn-sub" id="rvThousand" title="この会場の金額は千円単位だと覚えて、同じ会場のほかの車も直します">千円単位として1/10にする（${h(r.auction_house || "会場")}を覚える）</button>` : ""}
+     ${(r.kind === "price" || r.kind === "outlier") && r.bid_price_man >= 100 ? `<button class="btn btn-sub" id="rvThousand" title="この会場の金額は千円単位だと覚えて、同じ会場のほかの車も直します">千円単位として1/10にする（${h(r.auction_house || "会場")}を覚える）</button>` : ""}
      <button class="btn btn-main" id="rvOk" style="font-size:13px;padding:6px 14px" title="この車を確認済みにして一覧から外す">✔ 確認済み（次へ）</button>`;
   $("rvSave").onclick = () => saveReview(false);
   if ($("rvThousand")) $("rvThousand").onclick = async () => {

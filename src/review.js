@@ -1,4 +1,5 @@
 import { json } from "./util.js";
+import { modelName } from "./turnover.js";
 
 // ---- 確認リスト ----------------------------------------------------------------
 // データの値から「確認が必要な車」を見つける。確認済みにした車（review_checked = 1）は出さない。
@@ -34,13 +35,44 @@ export function fixPriceUnit(v, units) {
 // 種類（表示順＝優先順）
 export const REVIEW_KINDS = [
   { key: "price", label: "金額が間違っていそう" },
+  { key: "outlier", label: "相場・売値が他の車とかけ離れている" },
   { key: "dup", label: "管理番号が重複" },
   { key: "missing", label: "情報が欠けている" },
   { key: "handbid", label: "落札金額が手書き" },
   { key: "noplan", label: "予定価格が空欄" },
 ];
 
-function issuesOf(r, dupCount) {
+// ---- 相場・売値の外れ値 ---------------------------------------------------------------
+// 似た車（同じ車種・ハイブリッド/EVかどうか・年式±1年・距離が近い）の中央値と比べる。
+// 同じグレードの車が4台以上あればグレードもそろえて比べ（±40%・20万円以上）、
+// なければ車種全体と比べる（グレード差があるので ×1.8 以上 / 半分以下・30万円以上のときだけ）
+const PEER_KEY = (r) => modelName(r.car_name).toUpperCase().replace(/[\s\-‐－]/g, "");
+const isElectrified = (r) => /ハイブリッド|HYBRID|HV|e:|E-POWER|PHEV|EV/i.test(`${r.car_name || ""} ${r.grade || ""}`.normalize("NFKC"));
+const gradeKey = (r) => String(r.grade || "").normalize("NFKC").toUpperCase().replace(/ハイブリッド|HYBRID/g, "").trim().split(/[\s・/]+/)[0] || "";
+const median = (a) => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+function outlierIssues(r, byModel) {
+  const out = [];
+  if (!r.year) return out;
+  const pool = byModel.get(PEER_KEY(r)) || [];
+  for (const [f, label] of [["bid_price_man", "落札金額"], ["planned_price_man", "予定価格（売値）"]]) {
+    const v = r[f];
+    if (v == null) continue;
+    const peers = pool.filter((p) => p !== r && p[f] != null && p.year && isElectrified(p) === isElectrified(r) && Math.abs(p.year - r.year) <= 1
+      && Math.abs((p.mileage_km || 0) - (r.mileage_km || 0)) <= Math.max(20000, 0.5 * (r.mileage_km || 0)));
+    const g = gradeKey(r), same = g ? peers.filter((p) => gradeKey(p) === g) : [];
+    const sameGrade = same.length >= 4, use = sameGrade ? same : peers;
+    if (use.length < 4) continue;
+    const m = Math.round(median(use.map((p) => p[f])) * 10) / 10;
+    const [hi, lo, abs] = sameGrade ? [1.4, 0.65, 20] : [1.8, 0.5, 30];
+    if ((v > m * hi && v - m >= abs) || (v < m * lo && m - v >= abs)) {
+      const pct = Math.round((v / m - 1) * 100);
+      out.push(["outlier", `${label} ${v}万円 が、似た車${use.length}台（${sameGrade ? "同じグレード・" : ""}${r.year - 1}〜${r.year + 1}年式・距離が近い）の中央値 ${m}万円 より${pct > 0 ? `${pct}%高い` : `${-pct}%安い`}`]);
+    }
+  }
+  return out;
+}
+
+function issuesOf(r, dupCount, byModel) {
   const out = [];
   const bid = r.bid_price_man, plan = r.planned_price_man;
   if (bid != null && bid >= 1000) out.push(["price", `落札金額が ${bid.toLocaleString()}万円（桁ずれ？）`]);
@@ -54,6 +86,7 @@ function issuesOf(r, dupCount) {
   const reason = r.review_reason || "";
   if (/落札金額は手書き/.test(reason)) out.push(["handbid", "落札金額は手書きの数字から入力"]);
   if (plan == null) out.push(["noplan", /計算式/.test(reason) ? "予定価格が計算式で書かれている" : "予定価格が空欄"]);
+  if (byModel) out.push(...outlierIssues(r, byModel));
   return out;
 }
 
@@ -66,10 +99,12 @@ export async function handleReview(request, env, url) {
     ).all();
     const dupCount = {};
     for (const r of results) if (r.control_no) dupCount[r.control_no] = (dupCount[r.control_no] || 0) + 1;
+    const byModel = new Map();
+    for (const r of results) { const k = PEER_KEY(r); if (!k) continue; if (!byModel.has(k)) byModel.set(k, []); byModel.get(k).push(r); }
     const items = [];
     let checked = 0;
     for (const r of results) {
-      const iss = issuesOf(r, dupCount);
+      const iss = issuesOf(r, dupCount, byModel);
       if (!iss.length) continue;
       if (r.review_checked) { checked++; continue; }
       const kind = REVIEW_KINDS.find((k) => iss.some((i) => i[0] === k.key)).key; // いちばん優先度の高い種類で分ける
