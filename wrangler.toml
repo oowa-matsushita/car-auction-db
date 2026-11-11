@@ -12,6 +12,8 @@ cpu_ms = 120000
 [assets]
 directory = "./public"
 binding = "ASSETS"
+# 画面（HTML・JS）もログインの確認を通してから出す
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"

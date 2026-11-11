@@ -153,19 +153,60 @@ function ensureSchema(db) {
 }
 
 // ---- 認証（APP_PASSWORD を設定した場合のみ） --------------------------------------
-function checkAuth(request, env) {
-  if (!env.APP_PASSWORD) return null;
+// ---- ログイン（ID とパスワード） ----------------------------------------------------
+// パスワードそのものはコードに書かず、「ID:パスワード」の SHA-256 だけを持つ。
+// Cloudflare の変数 APP_USER / APP_PASSWORD を設定すると、そちらが優先される。
+const LOGIN_HASH = "9e83ac1eaa927a37866e004585232f65538ce92ade417d4a546356b5395f3952"; // matsushita / ****
+const SESSION_COOKIE = "mms_session";
+async function sha256hex(text) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function loginHash(env) {
+  return env.APP_USER && env.APP_PASSWORD ? sha256hex(`${env.APP_USER}:${env.APP_PASSWORD}`) : LOGIN_HASH;
+}
+const sessionToken = async (env) => sha256hex("mms-session:" + (await loginHash(env)));
+async function credentialsOk(env, id, pass) { return (await sha256hex(`${id}:${pass}`)) === (await loginHash(env)); }
+function getCookie(request, name) {
+  const m = (request.headers.get("cookie") || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]+)"));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+const LOGIN_PAGE = (msg = "") => `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MMS ログイン</title><style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#13234a;font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif}
+form{background:#fff;border-radius:12px;padding:28px 30px;width:min(340px,90vw);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+h1{margin:0 0 4px;font-size:22px;color:#13234a;letter-spacing:2px}p.s{margin:0 0 18px;color:#667;font-size:13px}
+label{display:block;font-size:13px;color:#456;margin:10px 0 4px}input{width:100%;box-sizing:border-box;font-size:16px;padding:9px 10px;border:1px solid #b9c3d1;border-radius:6px}
+button{margin-top:18px;width:100%;padding:10px;font-size:16px;font-weight:700;color:#fff;background:#f26b1d;border:0;border-radius:6px;cursor:pointer}
+.e{color:#c62828;font-size:13px;margin-top:10px;min-height:1em}</style></head><body>
+<form method="post" action="/login"><h1>MMS</h1><p class="s">IDとパスワードを入れてください</p>
+<label for="id">ID</label><input id="id" name="id" autocomplete="username" autofocus required>
+<label for="pw">パスワード</label><input id="pw" name="pw" type="password" autocomplete="current-password" required>
+<button type="submit">ログイン</button><div class="e">${msg}</div></form></body></html>`;
+// ログインしていなければ、ログイン画面（API は 401）を返す。ログインしていれば null
+async function checkAuth(request, env, url) {
+  const path = url.pathname;
+  if (path === "/login" && request.method === "POST") {
+    const f = await request.formData().catch(() => null);
+    if (f && (await credentialsOk(env, String(f.get("id") || "").trim(), String(f.get("pw") || "")))) {
+      return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `${SESSION_COOKIE}=${await sessionToken(env)}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax` } });
+    }
+    return new Response(LOGIN_PAGE("IDかパスワードが違います"), { status: 401, headers: { "content-type": "text/html; charset=utf-8" } });
+  }
+  if (path === "/logout") {
+    return new Response(null, { status: 303, headers: { location: "/login", "set-cookie": `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax` } });
+  }
+  if (getCookie(request, SESSION_COOKIE) === (await sessionToken(env))) return path === "/login" ? Response.redirect(new URL("/", url), 303) : null;
+  // 取り込み用（curl など）：Basic 認証でも通す
   const h = request.headers.get("authorization") || "";
   if (h.startsWith("Basic ")) {
     try {
-      const pass = atob(h.slice(6)).split(":").slice(1).join(":");
-      if (pass === env.APP_PASSWORD) return null;
+      const [id, ...rest] = atob(h.slice(6)).split(":");
+      if (await credentialsOk(env, id, rest.join(":"))) return null;
     } catch {}
   }
-  return new Response("パスワードが必要です", {
-    status: 401,
-    headers: { "www-authenticate": 'Basic realm="shiire-daicho", charset="UTF-8"' },
-  });
+  if (path.startsWith("/api/")) return new Response(JSON.stringify({ error: "ログインしてください" }), { status: 401, headers: { "content-type": "application/json; charset=utf-8" } });
+  return new Response(LOGIN_PAGE(), { status: path === "/login" ? 200 : 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
 // ---- 読み取り待ちの列（Cloudflare Queues） ----------------------------------------
@@ -276,10 +317,10 @@ export default {
   },
 
   async fetch(request, env) {
-    const denied = checkAuth(request, env);
+    const url = new URL(request.url);
+    const denied = await checkAuth(request, env, url);
     if (denied) return denied;
 
-    const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
 
