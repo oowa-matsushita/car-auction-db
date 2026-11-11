@@ -47,10 +47,19 @@
   /* 画面の2/3の幅に、上から 月ごとの回転率 → グラフ → 車名ごとの回転率（縦スクロールは車名ごとの表の中だけ） */
   #tab-turnover > .tv-main { flex: 1; min-height: 0; width: 66.7%; min-width: 860px; display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; overflow: hidden; }
   .tv-main > .tv-card { flex: none; margin-bottom: 0; }
-  #tvMonthCard { max-height: 30vh; overflow: auto; padding: 8px 12px; }
+  #tvMonthCard { overflow: auto; padding: 8px 12px; }
   #tvModelCard { padding: 8px 12px; }
   .tv-i { font-size: 13px; color: #8a93a3; cursor: help; font-weight: 400; }
   #tvMonthCard .tv-table td, #tvMonthCard .tv-table th { padding: 4px 8px; }
+  /* 月ごと（左）と週ごと（右）を横に並べる */
+  .tv-main > .tv-row { flex: none; display: flex; gap: 10px; align-items: flex-start; max-height: 32vh; }
+  .tv-row > .tv-card { margin-bottom: 0; min-width: 0; max-height: 32vh; }
+  .tv-row > #tvMonthCard { flex: 0 1 auto; }
+  .tv-row > #tvWeekCard { flex: 1 1 auto; }
+  #tvWeekCard { overflow: auto; padding: 8px 12px; }
+  #tvWeekCard .tv-table td, #tvWeekCard .tv-table th { padding: 3px 8px; }
+  #tvWeekCard tr.future td { color: #a0a8b6; }
+  #tvWeekCard .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 700; background: #fff3e0; color: #c25a00; }
   .tv-main > #tvModelCard { flex: 1; min-height: 140px; display: flex; flex-direction: column; }
   #tvModelCard > * { flex: none; }
   #tvModelCard > .scroll { flex: 1; min-height: 0; overflow: auto; }
@@ -272,6 +281,7 @@
     <div id="tvLog" style="font-size:12px;color:#ffe9a8"></div>
   </div>
   <div class="tv-main">
+    <div class="tv-row">
     <div class="tv-card" id="tvMonthCard">
       <h2 style="margin:0 0 6px">月ごとの回転率 <span class="tv-i" title="回転率 ＝ その月の販売台数（販売データの契約日付の月で数える）÷ 月初在庫。月を押すと、下に車名ごとの回転率が出ます。">ⓘ</span></h2>
       <div style="overflow:auto">
@@ -281,6 +291,16 @@
         </table>
       </div>
       <div class="empty" id="tvEmpty" hidden>まだデータがありません。月初在庫・販売データのCSVを上の枠にドロップしてください。</div>
+    </div>
+    <div class="tv-card" id="tvWeekCard" hidden>
+      <h2 style="margin:0 0 6px;cursor:pointer" id="tvWeekHead"><span id="tvWeekArrow">▼</span> <span id="tvWeekTitle">週ごとの回転率</span> <span class="tv-i" title="週の回転率 ＝ その週の販売台数（契約日付）÷ その月の月初在庫。週は月曜〜日曜で、月の初めと終わりは月の中だけで区切ります。見出しを押すと たたむ／ひらく ができます。">ⓘ</span></h2>
+      <div id="tvWeekBody" style="overflow:auto">
+        <table class="tv-table">
+          <thead><tr><th>週</th><th style="text-align:left">期間</th><th>日数</th><th>販売台数</th><th>回転率</th><th>平均台粗利</th></tr></thead>
+          <tbody id="tvWeekRows"></tbody>
+        </table>
+      </div>
+    </div>
     </div>
     <div id="tvPanel" class="tv-card">
     <div class="bar2"><b id="tvChartTitle">回転率と台粗利の推移</b>

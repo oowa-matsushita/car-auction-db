@@ -84,7 +84,34 @@ async function showModels(month) {
   $("tvModelCard").hidden = false;
   drawModels();
   if (tvSelKey) showCarSold(tvSelKey);
+  showWeeks(month);
 }
+
+// ---------- 週ごとの回転率（選んでいる月） ----------
+let tvWeekSeq = 0;
+const WD = "日月火水木金土";
+const mdw = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}(${WD[new Date(d + "T00:00:00Z").getUTCDay()]})`;
+async function showWeeks(month) {
+  const seq = ++tvWeekSeq;
+  let j;
+  try { const res = await fetch(`/api/turnover/${month}/weeks?${tvQs()}`); j = await res.json(); if (!res.ok) throw 0; } catch { return; }
+  if (seq !== tvWeekSeq) return;
+  $("tvWeekTitle").textContent = `週ごとの回転率（${Number(month.slice(5))}月）`;
+  $("tvWeekTitle").title = j.opening ? `回転率は 週の販売台数 ÷ ${monthLabel(month)}の月初在庫 ${j.opening.toLocaleString()}台` : "";
+  $("tvWeekRows").innerHTML = j.weeks.map((w) => `<tr class="${w.status}">
+    <td><b>${w.no}週目</b></td>
+    <td style="text-align:left;white-space:nowrap">${mdw(w.from)}${w.from === w.to ? "" : "〜" + mdw(w.to)}${w.status === "partial" ? `<span class="tag" title="${mdw(j.through)}までの販売データ">途中</span>` : w.status === "future" ? '<span class="tag" style="background:#eef1f6;color:#8a93a3">これから</span>' : ""}</td>
+    <td class="n" style="white-space:nowrap">${w.days}日<span class="tv-dim" style="font-size:11px">（休${w.off_days}）</span></td>
+    <td class="n">${w.status === "future" ? "—" : w.sold.toLocaleString() + "台"}</td>
+    <td class="n tv-rate">${w.status === "future" || w.rate == null ? "—" : pct(w.rate)}</td>
+    <td class="n">${w.status === "future" ? "—" : man1(w.gross_avg)}</td>
+  </tr>`).join("");
+  $("tvWeekCard").hidden = false;
+}
+// たたむ／ひらく（このパソコンに覚える）
+const setWeekOpen = (open) => { $("tvWeekBody").hidden = !open; $("tvWeekArrow").textContent = open ? "▼" : "▶"; try { localStorage.setItem("tvWeekOpen", open ? "1" : "0"); } catch {} };
+try { if (localStorage.getItem("tvWeekOpen") === "0") setWeekOpen(false); } catch {}
+$("tvWeekHead").onclick = (e) => { if (!e.target.closest(".tv-i")) setWeekOpen($("tvWeekBody").hidden); };
 // 並べ替え（見出しを押すたびに 降順 ⇔ 昇順。値が無いものはいつも最後）
 const tvSort = { key: "weather", dir: "desc" }; // はじめは天気の良い順（快晴から）
 $("tvModelHead").addEventListener("click", (e) => {

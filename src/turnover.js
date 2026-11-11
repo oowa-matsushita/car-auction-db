@@ -309,6 +309,34 @@ export async function handleTurnover(request, env, url) {
     return json({ month, opening: stock.length, sold: sold.length, models });
   }
 
+  // 週ごとの回転率（その週の販売台数 ÷ その月の月初在庫）。週は月曜〜日曜で、月の初めと終わりは月の中だけで区切る
+  const wk = path.match(/^\/api\/turnover\/(\d{4}-\d{2})\/weeks$/);
+  if (wk && method === "GET") {
+    const month = wk[1];
+    const inv = await db.prepare("SELECT item_count FROM inv_months WHERE month = ?").bind(month).first();
+    const opening = inv?.item_count || null;
+    const { results } = await db.prepare(`SELECT contract_date AS d, COUNT(*) AS n, SUM(CASE WHEN cost > 0 THEN ${grossSql(tax)} END) AS g, SUM(CASE WHEN cost > 0 THEN 1 ELSE 0 END) AS gn
+      FROM sales_items s WHERE month = ? ${channelSql(ch)} GROUP BY contract_date`).bind(month).all();
+    const byDay = Object.fromEntries(results.map((r) => [r.d, r]));
+    const through = results.reduce((x, r) => (r.d && r.d > x ? r.d : x), "");
+    const weeks = [];
+    let w = null;
+    for (const d of daysOfMonth(month)) {
+      const dow = new Date(d + "T00:00:00Z").getUTCDay();
+      if (!w || dow === 1) { w = { no: weeks.length + 1, from: d, to: d, days: 0, off_days: 0, sold: 0, g: 0, gn: 0 }; weeks.push(w); }
+      w.to = d; w.days++; if (isOffDay(d)) w.off_days++;
+      const r = byDay[d];
+      if (r) { w.sold += r.n; w.g += r.g || 0; w.gn += r.gn || 0; }
+    }
+    for (const x of weeks) {
+      x.rate = opening ? x.sold / opening : null;
+      x.gross_avg = x.gn ? Math.round(x.g / x.gn) : null;
+      x.status = !through || x.from > through ? "future" : x.to > through ? "partial" : "done";
+      delete x.g; delete x.gn;
+    }
+    return json({ month, opening, through, weeks });
+  }
+
   // 車の種類ごとの回転率の推移（月初在庫と販売データがそろっている月だけ）
   if (path === "/api/turnover/history" && method === "GET") {
     const { results: months } = await db.prepare(
