@@ -15,6 +15,10 @@ addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 // ---------- 回転率 ----------
 // 数える販売（小売＋業販 / 小売のみ / 業販のみ）。選んだものはこのブラウザに覚えておく
 const tvCh = () => $("tvCh").value;
+const tvQs = () => `ch=${tvCh()}&tax=${$("tvTax").value}`;
+const man1 = (v) => (v == null ? "—" : (v / 10000).toFixed(1) + "万円");
+try { const v = localStorage.getItem("tvTax"); if (v) $("tvTax").value = v; } catch {}
+$("tvTax").onchange = () => { try { localStorage.setItem("tvTax", $("tvTax").value); } catch {} $("tvChartCard").hidden = true; loadTurnover(); };
 try { const v = localStorage.getItem("tvCh"); if (v) $("tvCh").value = v; } catch {}
 $("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch {} $("tvChartCard").hidden = true; loadTurnover(); };
 const yen = (v) => (v == null ? "" : Number(v).toLocaleString() + "円");
@@ -23,14 +27,18 @@ const monthLabel = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
 const tvLog = (s) => ($("tvLog").textContent = s);
 
 let tvMonth = null, tvModels = [];
+// 条件を続けて変えたとき、古い結果で上書きしないよう、最新の読み込みだけを使う
+let tvLoadSeq = 0, tvModelSeq = 0;
 async function loadTurnover() {
+  const seq = ++tvLoadSeq;
   loadHistory();
   let data;
   try {
-    const res = await fetch("/api/turnover?ch=" + tvCh());
+    const res = await fetch("/api/turnover?" + tvQs());
     data = await res.json();
     if (!res.ok) throw new Error(data.error || res.status);
   } catch (e) { tvLog("❌ 読み込みに失敗しました: " + e.message); return; }
+  if (seq !== tvLoadSeq) return;
   const months = data.months || [];
   const maxRate = Math.max(0.0001, ...months.map((m) => m.rate || 0));
   $("tvEmpty").hidden = months.length > 0;
@@ -42,6 +50,7 @@ async function loadTurnover() {
         : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold.toLocaleString()}台</span>`
           + (m.sold_retail || m.sold_wholesale ? `<div class="tv-dim" style="font-size:11px">小売 ${m.sold_retail} / 業販 ${m.sold_wholesale}</div>` : "")}</td>
       <td class="n tv-rate">${pct(m.rate)}</td>
+      <td class="n"><b>${man1(m.gross_avg)}</b>${m.gross_total != null ? `<div class="tv-dim" style="font-size:11px">合計 ${Math.round(m.gross_total / 10000).toLocaleString()}万円</div>` : ""}</td>
       <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / maxRate) * 150)}px"></div></td>
       <td style="white-space:nowrap">${m.item_count == null ? "" : `<button class="btn btn-sub" data-del="${m.month}" style="padding:2px 6px">在庫</button>`}
         ${m.sold == null ? "" : `<button class="btn btn-sub" data-delsales="${m.month}" style="padding:2px 6px">販売</button>`}</td>
@@ -56,8 +65,10 @@ async function loadTurnover() {
 async function showModels(month) {
   tvMonth = month;
   document.querySelectorAll("#tvRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.month === month));
-  const res = await fetch(`/api/turnover/${month}/models?ch=${tvCh()}`);
+  const seq = ++tvModelSeq;
+  const res = await fetch(`/api/turnover/${month}/models?${tvQs()}`);
   const j = await res.json();
+  if (seq !== tvModelSeq) return;
   if (!res.ok) return tvLog("❌ " + (j.error || "読み込みに失敗しました"));
   tvModels = j.models;
   $("tvModelTitle").textContent = `車名ごとの回転率（${monthLabel(month)}）`;
@@ -98,7 +109,8 @@ function drawModels() {
     <td class="n">${m.opening.toLocaleString()}台</td>
     <td class="n">${m.sold.toLocaleString()}台</td>
     <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
-  </tr>`).join("") || '<tr><td colspan="4" class="tv-dim">該当する車がありません</td></tr>';
+    <td class="n">${man1(m.gross_avg)}</td>
+  </tr>`).join("") || '<tr><td colspan="5" class="tv-dim">該当する車がありません</td></tr>';
 }
 $("tvModelFilter").addEventListener("input", drawModels);
 
@@ -124,7 +136,7 @@ $("tvRows").addEventListener("click", async (e) => {
 });
 
 async function showSales(month) {
-  const res = await fetch(`/api/turnover/${month}/sales?ch=${tvCh()}`);
+  const res = await fetch(`/api/turnover/${month}/sales?${tvQs()}`);
   const j = await res.json();
   if (!res.ok) return alert(j.error || "読み込みに失敗しました");
   $("tvSoldTitle").textContent = `${monthLabel(month)}の販売データ（契約日付が${monthLabel(month)}の車）：${j.rows.length}台`;
@@ -168,8 +180,10 @@ dropZone($("dropInv"), $("inInv"), importInventory);
 
 // ---------- 回転率の推移グラフ（折れ線：その車＝実線、全体＝点線） ----------
 let tvHistory = null;
+let tvHistSeq = 0;
 async function loadHistory() {
-  try { tvHistory = await (await fetch("/api/turnover/history?ch=" + tvCh())).json(); } catch { tvHistory = null; }
+  const seq = ++tvHistSeq;
+  try { const d = await (await fetch("/api/turnover/history?" + tvQs())).json(); if (seq === tvHistSeq) tvHistory = d; } catch { if (seq === tvHistSeq) tvHistory = null; }
 }
 const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", AVG = "#8a94a6";
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
@@ -233,7 +247,7 @@ function modelPoints(key) {
   const pts = tvHistory.models[key].points;
   return tvHistory.months.map((m) => ({ month: m.month, all: m.rate, ...(pts[m.month] || { opening: 0, sold: 0, rate: null }) }));
 }
-const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == null ? "—（月初在庫なし）" : pct(p.rate)}</b><br>販売 ${p.sold}台 ÷ 月初在庫 ${p.opening}台<br>全体 ${pct(p.all)}`;
+const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == null ? "—（月初在庫なし）" : pct(p.rate)}</b><br>販売 ${p.sold}台 ÷ 月初在庫 ${p.opening}台<br>全体 ${pct(p.all)}${p.gross_avg != null ? `<br>平均台粗利 ${man1(p.gross_avg)}` : ""}`;
 
 // マウスを乗せたとき：小さなグラフ
 const pop = $("tvPop");
@@ -291,10 +305,10 @@ function showChart(key) {
 async function showCarSold(key) {
   const month = tvMonth;
   $("tvCarSoldTitle").textContent = `${monthLabel(month)}に売れた ${tvHistory.models[key]?.name || ""}`;
-  $("tvCarSoldRows").innerHTML = '<tr><td colspan="7" class="tv-dim">読み込み中…</td></tr>';
-  const res = await fetch(`/api/turnover/${month}/model-sales?ch=${tvCh()}&key=${encodeURIComponent(key)}`);
+  $("tvCarSoldRows").innerHTML = '<tr><td colspan="9" class="tv-dim">読み込み中…</td></tr>';
+  const res = await fetch(`/api/turnover/${month}/model-sales?${tvQs()}&key=${encodeURIComponent(key)}`);
   const j = await res.json();
-  if (!res.ok) { $("tvCarSoldRows").innerHTML = `<tr><td colspan="7">${h(j.error || "読み込みに失敗しました")}</td></tr>`; return; }
+  if (!res.ok) { $("tvCarSoldRows").innerHTML = `<tr><td colspan="9">${h(j.error || "読み込みに失敗しました")}</td></tr>`; return; }
   $("tvCarSoldTitle").textContent += `：${j.rows.length}台`;
   $("tvCarSoldNote").textContent = j.rows.length && !j.linkable
     ? "※ 販売データに「在庫No」か「車台番号」の列が無いため、年式・距離・色・グレードは出せません。在庫No入りの販売データCSVを入れ直すと表示されます。"
@@ -304,7 +318,9 @@ async function showCarSold(key) {
     <td>${h(r.contract_date)}</td><td>${h(r.car_name)}</td><td>${r.year ? h(r.year) : dash}</td>
     <td class="n">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString() + "km"}</td>
     <td>${r.color ? h(r.color) : dash}</td><td>${r.grade ? h(r.grade) : dash}</td>
-    <td class="n">${r.price == null ? dash : yen(r.price)}</td></tr>`).join("") || '<tr><td colspan="7" class="tv-dim">この月に売れた車はありません</td></tr>';
+    <td class="n">${r.price == null ? dash : yen(r.price)}</td>
+    <td class="n">${r.cost == null ? dash : yen(r.cost)}</td>
+    <td class="n"><b>${r.gross == null ? dash : yen(r.gross)}</b></td></tr>`).join("") || '<tr><td colspan="9" class="tv-dim">この月に売れた車はありません</td></tr>';
 }
 $("tvModelRows").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-key]");

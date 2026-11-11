@@ -10,6 +10,7 @@ export const TURNOVER_ADDED_COLUMNS = [
   "ALTER TABLE sales_items ADD COLUMN chassis_no TEXT",
   "ALTER TABLE sales_items ADD COLUMN customer TEXT",
   "ALTER TABLE sales_items ADD COLUMN channel TEXT",
+  "ALTER TABLE sales_items ADD COLUMN cost INTEGER",
 ];
 
 export const TURNOVER_SCHEMA = [
@@ -70,6 +71,7 @@ const SALES_FIELDS = {
   price: ["車両本体価格", "車輛本体価格", "本体価格"],
   customer: ["顧客名"],
   fees: ["販売諸費用計"],
+  cost: ["本体価格原価", "車輌本体原価", "車両本体原価"],
   discount: ["車両本体値引", "値引"],
   sales_amount: ["売上高"],
   stock_no: ["在庫No", "在庫NO", "在庫番号"],
@@ -93,6 +95,9 @@ export function salesChannel(r) {
   return "retail";
 }
 // 回転率で数える販売の条件（ch: all=小売+業販 / retail / wholesale）
+// 台粗利 ＝ 車両本体価格 − 本体原価。tax=ex のときは本体価格（税込）を税抜にしてから引く
+export const grossSql = (tax) => (tax === "in" ? "(price - cost)" : "(ROUND(price / 1.1) - cost)");
+export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? r.price - r.cost : Math.round(r.price / 1.1) - r.cost) : null);
 export function channelSql(ch) {
   if (ch === "retail") return "AND COALESCE(channel,'retail') = 'retail'";
   if (ch === "wholesale") return "AND channel = 'wholesale'";
@@ -125,6 +130,7 @@ function parseSales(rows) {
       car_name: clean(get("car_name")), price: toInt(get("price")), discount: toInt(get("discount")), sales_amount: toInt(get("sales_amount")),
       stock_no: clean(get("stock_no")), chassis_no: clean(get("chassis_no")),
       customer: clean(get("customer")), fees: pos.fees ? toInt(get("fees")) : null,
+      cost: pos.cost ? toInt(get("cost")) || null : null,
     });
   }
   return recs;
@@ -162,24 +168,29 @@ export function modelName(name) {
 const modelKey = (name) => modelName(name).toUpperCase().replace(/[\s\-‐－]/g, "");
 
 // 月初在庫と販売の車名を、車の種類ごとにまとめて数える
-function groupModels(stockRows, soldRows) {
+function groupModels(stockRows, soldRows, tax = "ex") {
   const groups = new Map();
   const add = (name, field) => {
     const key = modelKey(name);
     if (!key) return;
-    const g = groups.get(key) || { key, names: {}, opening: 0, sold: 0 };
+    const g = groups.get(key) || { key, names: {}, opening: 0, sold: 0, gsum: 0, gn: 0 };
     const disp = modelName(name);
     g.names[disp] = (g.names[disp] || 0) + 1;
     g[field]++;
     groups.set(key, g);
   };
   stockRows.forEach((r) => add(r.car_name, "opening"));
-  soldRows.forEach((r) => add(r.car_name, "sold"));
+  soldRows.forEach((r) => {
+    add(r.car_name, "sold");
+    const gp = grossOf(r, tax), g = groups.get(modelKey(r.car_name));
+    if (g && gp != null) { g.gsum += gp; g.gn++; }
+  });
   return [...groups.values()].map((g) => ({
     key: g.key,
     name: Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0], // いちばん多い書き方で表示
     opening: g.opening, sold: g.sold,
     rate: g.opening ? g.sold / g.opening : null,
+    gross_avg: g.gn ? Math.round(g.gsum / g.gn) : null, gross_total: g.gn ? g.gsum : null,
   }));
 }
 
@@ -188,6 +199,7 @@ export async function handleTurnover(request, env, url) {
 
   // 月ごとの一覧
   const ch = url.searchParams.get("ch") || "all";
+  const tax = url.searchParams.get("tax") === "in" ? "in" : "ex";
   if (path === "/api/turnover" && method === "GET") {
     // 月初在庫か販売データのどちらかがある月を並べる
     const { results: months } = await db.prepare(`
@@ -195,14 +207,17 @@ export async function handleTurnover(request, env, url) {
       SELECT ms.month, m.filename, m.item_count,
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)}) AS sold,
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'retail') AS sold_retail,
-        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'wholesale') AS sold_wholesale
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'wholesale') AS sold_wholesale,
+        (SELECT SUM(${grossSql(tax)}) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_total,
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_n
       FROM ms LEFT JOIN inv_months m ON m.month = ms.month
       ORDER BY ms.month DESC`).all();
     for (const m of months) {
       if (!m.sold) m.sold = null;
       m.rate = m.sold != null && m.item_count ? m.sold / m.item_count : null;
+      m.gross_avg = m.gross_n ? Math.round(m.gross_total / m.gross_n) : null;
     }
-    return json({ months });
+    return json({ months, tax });
   }
 
   // 月初在庫CSVを取り込む（同じ月があれば入れ替え）
@@ -223,8 +238,8 @@ export async function handleTurnover(request, env, url) {
       for (const [mo, list] of Object.entries(byMonth)) {
         stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ?").bind(mo));
         for (const r of list) {
-          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r)));
+          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost));
         }
       }
       for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));
@@ -267,8 +282,8 @@ export async function handleTurnover(request, env, url) {
   if (mm && method === "GET") {
     const month = mm[1];
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-    const { results: sold } = await db.prepare(`SELECT car_name FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
-    const models = groupModels(stock, sold);
+    const { results: sold } = await db.prepare(`SELECT car_name, price, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
+    const models = groupModels(stock, sold, tax);
     models.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.sold - a.sold || a.name.localeCompare(b.name, "ja"));
     return json({ month, opening: stock.length, sold: sold.length, models });
   }
@@ -281,11 +296,11 @@ export async function handleTurnover(request, env, url) {
     const out = { months: [], models: {} };
     for (const { month } of months) {
       const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-      const { results: sold } = await db.prepare(`SELECT car_name FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
+      const { results: sold } = await db.prepare(`SELECT car_name, price, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
       out.months.push({ month, opening: stock.length, sold: sold.length, rate: stock.length ? sold.length / stock.length : null });
-      for (const g of groupModels(stock, sold)) {
+      for (const g of groupModels(stock, sold, tax)) {
         const m = (out.models[g.key] ||= { name: g.name, points: {} });
-        m.points[month] = { opening: g.opening, sold: g.sold, rate: g.rate };
+        m.points[month] = { opening: g.opening, sold: g.sold, rate: g.rate, gross_avg: g.gross_avg };
       }
     }
     return json(out);
@@ -314,7 +329,7 @@ export async function handleTurnover(request, env, url) {
         mileage_km: inv?.mileage_km ?? veh?.mileage_km ?? null,
         color: inv?.color || veh?.color || "",
         grade: veh?.grade || "",
-        price: r.price, linked: !!inv,
+        price: r.price, cost: r.cost, gross: grossOf(r, tax), customer: r.customer, channel: r.channel, linked: !!inv,
       });
     }
     return json({ month, rows: out, linkable: list.some((r) => r.stock_no || r.chassis_no) });

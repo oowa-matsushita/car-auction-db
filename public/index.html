@@ -234,6 +234,8 @@
     <span style="font-size:12px;color:#c9e6ee">月</span><input type="month" id="invMonth" title="ファイル名に年月（例: 202610）が無いときに使います">
     <span style="font-size:12px;color:#c9e6ee">数える販売</span>
     <select id="tvCh"><option value="all">小売＋業販</option><option value="retail">小売のみ</option><option value="wholesale">業販のみ</option></select>
+    <span style="font-size:12px;color:#c9e6ee">台粗利</span>
+    <select id="tvTax" title="台粗利 ＝ 車両本体価格 − 本体原価"><option value="ex">本体価格を税抜にして計算</option><option value="in">本体価格（税込）のまま計算</option></select>
     <div id="tvLog" style="font-size:12px;color:#ffe9a8"></div>
   </div>
   <div class="tv-wrap">
@@ -242,7 +244,7 @@
       <div class="tv-note">回転率 ＝ その月の販売台数（販売データの契約日付の月で数える）÷ 月初在庫。月を押すと、下に車名ごとの回転率が出ます。</div>
       <div style="overflow:auto;margin-top:8px">
         <table class="tv-table">
-          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th style="width:160px"></th><th>削除</th></tr></thead>
+          <thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>平均台粗利</th><th style="width:160px"></th><th>削除</th></tr></thead>
           <tbody id="tvRows"></tbody>
         </table>
       </div>
@@ -256,7 +258,7 @@
       <h2 id="tvCarSoldTitle" style="margin-top:14px"></h2>
       <div id="tvCarSoldNote" class="tv-note"></div>
       <div style="overflow:auto;max-height:50vh;margin-top:6px">
-        <table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>契約日</th><th>車名</th><th>年式</th><th>距離</th><th>色</th><th>グレード</th><th>本体価格</th></tr></thead>
+        <table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>契約日</th><th>車名</th><th>年式</th><th>距離</th><th>色</th><th>グレード</th><th>本体価格</th><th>本体原価</th><th>台粗利</th></tr></thead>
         <tbody id="tvCarSoldRows"></tbody></table>
       </div>
     </div>
@@ -265,7 +267,7 @@
       <div class="tv-note">同じ車の種類はまとめて数えます（例：N-BOX・N-BOX新型・N-BOXカスタム → N-BOX、CX-5・CX-60 → CXシリーズ）。車名にマウスを乗せると回転率の推移のグラフ、押すと大きなグラフが出ます。</div>
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="margin:8px 0;width:200px">
       <div style="overflow:auto;max-height:60vh">
-        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th></tr></thead>
+        <table class="tv-table" style="min-width:0;width:auto"><thead><tr id="tvModelHead"><th data-sort="name" style="min-width:200px">車名</th><th data-sort="opening">月初在庫</th><th data-sort="sold">販売台数</th><th data-sort="rate">回転率</th><th data-sort="gross_avg">平均台粗利</th></tr></thead>
         <tbody id="tvModelRows"></tbody></table>
       </div>
     </div>
