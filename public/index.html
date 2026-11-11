@@ -70,6 +70,31 @@
   #tvModelRows tr.sel td { background: #ffe9a8 !important; }
   /* ---- 確認リスト ---- */
   #tab-review { flex: 1; min-height: 0; display: flex; }
+  /* ニュース */
+  #tab-news { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #eef1f6; }
+  .nw-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 14px; background: var(--navy); color: #fff; }
+  .nw-top input#nwQ { font-size: 13px; }
+  .nw-chk { font-size: 13px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .nw-bar { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 8px 14px; background: #fff; border-bottom: 1px solid var(--line); }
+  .nw-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .nw-chip { border: 1px solid #ccd4e0; background: #f6f8fb; color: #334; border-radius: 16px; padding: 3px 12px; font-size: 12px; cursor: pointer; user-select: none; }
+  .nw-chip.on { background: #13234a; border-color: #13234a; color: #fff; }
+  .nw-chip .n { opacity: .65; margin-left: 4px; }
+  .nw-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+  .nw-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+  .nw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .nw-card { display: flex; flex-direction: column; background: #fff; border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit; box-shadow: 0 1px 3px rgba(20,35,74,.12); transition: transform .12s, box-shadow .12s; border-top: 4px solid var(--c, #13234a); }
+  .nw-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(20,35,74,.18); }
+  .nw-card .img { height: 150px; background: #dfe5ee center/cover no-repeat; }
+  .nw-card .img.ph { height: 54px; font-size: 15px !important; display: grid; place-items: center; background: linear-gradient(135deg, var(--c, #13234a), #0b1530); color: rgba(255,255,255,.9); font-weight: 800; font-size: 18px; letter-spacing: 1px; }
+  .nw-card .in { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .nw-card .meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #667; flex-wrap: wrap; }
+  .nw-card .src { color: #fff; background: var(--c, #13234a); border-radius: 4px; padding: 1px 6px; font-weight: 700; }
+  .nw-card .cat { border: 1px solid #ccd4e0; border-radius: 4px; padding: 0 5px; }
+  .nw-card .new { color: #fff; background: #e53935; border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .nw-card .t { font-weight: 700; font-size: 14px; line-height: 1.45; color: #13234a; }
+  .nw-card .s { font-size: 12px; color: #556; line-height: 1.5; }
+  .nw-card .stock { align-self: flex-start; font-size: 11px; font-weight: 700; color: #8a4b00; background: #fff1d6; border: 1px solid #f3c27a; border-radius: 10px; padding: 1px 8px; }
   /* 設定画面 */
   #wxDlg { width: min(760px, 96vw); border-radius: 10px; }
   #wxDlg .hd { padding: 8px 14px; }
@@ -243,6 +268,7 @@
   <button data-tab="ledger">📋 仕入れ台帳</button>
   <button data-tab="turnover">🔄 回転率</button>
   <button data-tab="review">✅ 確認リスト <span id="rvBadge" class="rv-badge"></span></button>
+  <button data-tab="news">📰 ニュース</button>
   <a href="/logout" class="logout" title="ログアウト（次に開くときはIDとパスワードが必要です）">ログアウト</a>
 </nav>
 
@@ -297,6 +323,18 @@
 </div>
 </section>
 
+<section class="tab" id="tab-news" hidden>
+  <div class="nw-top">
+    <span style="font-size:16px;font-weight:700">📰 自動車ニュース</span>
+    <input id="nwQ" placeholder="キーワードでしぼり込み" style="width:200px">
+    <label class="nw-chk" title="月初在庫に5台以上ある車種の名前が見出しに入っている記事だけ"><input type="checkbox" id="nwStock"> 在庫の車種だけ</label>
+    <span style="flex:1"></span>
+    <span id="nwInfo" style="font-size:12px;color:#c9e6ee"></span>
+    <button class="btn btn-sub" id="nwReload" style="font-size:12px;padding:4px 12px">⟳ 最新にする</button>
+  </div>
+  <div class="nw-bar"><div id="nwCats" class="nw-chips"></div><div id="nwSrcs" class="nw-chips"></div></div>
+  <div class="nw-body"><div id="nwList" class="nw-grid"></div><div id="nwEmpty" class="empty" hidden>該当するニュースがありません</div></div>
+</section>
 <section class="tab" id="tab-review" hidden>
   <div class="rv-left">
     <div class="rv-head"><b>✅ 確認リスト</b><span id="rvCount" style="font-size:12px;color:#c9e6ee"></span><span style="flex:1"></span>
@@ -794,5 +832,6 @@ watchProgress();
 </script>
 <script src="review.js"></script>
 <script src="turnover.js"></script>
+<script src="news.js"></script>
 </body>
 </html>

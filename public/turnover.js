@@ -1,6 +1,6 @@
 "use strict";
 // ---------- タブの切り替え（#ledger / #turnover） ----------
-const TABS = ["ledger", "turnover", "review"];
+const TABS = ["ledger", "turnover", "review", "news"];
 function showTab(name) {
   if (!TABS.includes(name)) name = "ledger";
   for (const t of TABS) document.getElementById("tab-" + t).hidden = t !== name;
@@ -8,6 +8,7 @@ function showTab(name) {
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
   if (name === "turnover") loadTurnover();
   if (name === "review") loadReview();
+  if (name === "news" && typeof loadNews === "function") loadNews();
 }
 document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));

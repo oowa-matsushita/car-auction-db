@@ -36,8 +36,9 @@ max_batch_timeout = 2
 max_retries = 3
 
 # 毎日 0:05（日本時間）に、無料枠の都合で待たせていたページを読み取りに回す
+# 毎時 17分：自動車ニュースを取り直す
 [triggers]
-crons = ["5 15 * * *"]
+crons = ["5 15 * * *", "17 * * * *"]
 
 # Cloudflare の AI（READER = workers-ai / hybrid のとき使用）
 [ai]

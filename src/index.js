@@ -2,6 +2,7 @@ import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
 import { REVIEW_ADDED_COLUMNS, handleReview, loadPriceUnits, fixPriceUnit } from "./review.js";
+import { handleNews, refreshNews } from "./news.js";
 import { TURNOVER_SCHEMA, TURNOVER_ADDED_COLUMNS, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -344,7 +345,9 @@ async function processPage(env, msg) {
 export default {
   async scheduled(event, env) {
     await ensureSchema(env.DB);
-    await releaseWaiting(env);
+    // 毎時：自動車ニュースを取り直す ／ 毎日 0:05：待たせていたページを読み取りに回す
+    if (event.cron === "5 15 * * *") await releaseWaiting(env);
+    await refreshNews(env).catch(() => {});
   },
 
   async queue(batch, env) {
@@ -583,6 +586,12 @@ export default {
             "content-disposition": `attachment; filename="backup_${new Date().toISOString().slice(0, 10)}.tsv"`,
           },
         });
+      }
+
+      // 自動車ニュース
+      if (path === "/api/news") {
+        const res = await handleNews(request, env, url);
+        if (res) return res;
       }
 
       // 確認リスト
