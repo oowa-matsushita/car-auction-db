@@ -85,10 +85,30 @@ $("tvModelHead").addEventListener("click", (e) => {
   else { tvSort.key = k; tvSort.dir = k === "name" ? "asc" : "desc"; }
   drawModels();
 });
+// ---------- 天気（回転率と平均台粗利の組み合わせ） ----------
+// 回転率：40%以上=3、35%以上=2、30%以上=1、それ未満=0
+// 台粗利：15万以上=3、10万以上=2、5万以上=1、それ未満=0
+// 合計 6=快晴、4〜5=晴れ、3=曇り、1〜2=雨、0=台風
+const WEATHER = [
+  { min: 6, icon: "☀️", label: "快晴" },
+  { min: 4, icon: "🌤️", label: "晴れ" },
+  { min: 3, icon: "☁️", label: "曇り" },
+  { min: 1, icon: "🌧️", label: "雨" },
+  { min: 0, icon: "🌀", label: "台風" },
+];
+const rateScore = (r) => (r >= 0.4 ? 3 : r >= 0.35 ? 2 : r >= 0.3 ? 1 : 0);
+const grossScore = (g) => (g >= 150000 ? 3 : g >= 100000 ? 2 : g >= 50000 ? 1 : 0);
+function weatherOf(m) {
+  if (m.rate == null || m.gross_avg == null) return null;
+  const score = rateScore(m.rate) + grossScore(m.gross_avg);
+  return { score, ...WEATHER.find((w) => score >= w.min) };
+}
+
 function sortModels(list) {
   const { key, dir } = tvSort, sign = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
-    const va = a[key], vb = b[key];
+    const val = (m) => (key === "weather" ? weatherOf(m)?.score ?? null : m[key]);
+    const va = val(a), vb = val(b);
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
@@ -110,7 +130,10 @@ function drawModels() {
     <td class="n">${m.sold.toLocaleString()}台</td>
     <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
     <td class="n">${man1(m.gross_avg)}</td>
-  </tr>`).join("") || '<tr><td colspan="5" class="tv-dim">該当する車がありません</td></tr>';
+    ${(() => { const w = weatherOf(m); return w
+      ? `<td class="tv-wx" title="${w.label}（回転率${rateScore(m.rate)}点＋台粗利${grossScore(m.gross_avg)}点＝${w.score}点）"><span>${w.icon}</span>${w.label}</td>`
+      : '<td class="tv-wx tv-dim" title="月初在庫か台粗利が無いため判定できません">—</td>'; })()}
+  </tr>`).join("") || '<tr><td colspan="6" class="tv-dim">該当する車がありません</td></tr>';
 }
 $("tvModelFilter").addEventListener("input", drawModels);
 
