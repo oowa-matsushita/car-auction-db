@@ -50,18 +50,28 @@ function drawNews() {
     return `<span class="nw-chip ${nw.src === s.id ? "on" : ""}" data-src="${s.id}" title="${st && !st.ok ? "取得できませんでした：" + h(st.error) : ""}"><span class="dot" style="background:${s.color}"></span>${h(s.name)}${st && !st.ok ? " ⚠" : ""}</span>`;
   })].join("");
   const list = base.filter((it) => (!nw.cat || it.category === nw.cat) && (!nw.src || it.source === nw.src));
-  $("nwList").innerHTML = list.slice(0, 200).map((it) => {
+  const card = (it, hot) => {
     const s = src[it.source] || { name: it.source, color: "#13234a" }, st = stockOf(it);
     const fresh = Date.now() - Date.parse(it.published_at) < 6 * 3600e3;
+    const pts = Array.isArray(it.ai_points) && it.ai_points.length ? it.ai_points : null;
     return `<a class="nw-card" href="${h(it.url)}" target="_blank" rel="noopener noreferrer" style="--c:${s.color}">
-      ${it.image ? `<div class="img" style="background-image:url('${h(it.image)}')"></div>` : `<div class="img ph">${h(s.name.replace(/^Google：/, ""))}</div>`}
+      ${it.image ? `<div class="img" style="background-image:url('${h(it.image)}')"></div>` : `<div class="img ph">${h(s.name)}</div>`}
       <div class="in">
-        <div class="meta"><span class="src">${h(s.name)}</span>${fresh ? '<span class="new">NEW</span>' : ""}<span class="cat">${h(nw.categories[it.category] || "その他")}</span><span>${ago(it.published_at)}</span></div>
-        <div class="t">${h(it.title)}</div>
-        ${it.summary ? `<div class="s">${h(it.summary)}</div>` : ""}
+        <div class="meta"><span class="src">${h(s.name)}</span>${hot ? '<span class="hot">おすすめ</span>' : ""}${fresh ? '<span class="new">NEW</span>' : ""}<span class="cat">${h(nw.categories[it.category] || "その他")}</span><span>${ago(it.published_at)}</span></div>
+        <div class="t">${h(it.ai_title || it.title)}</div>
+        ${it.ai_title ? `<div class="orig">元の見出し：${h(it.title)}</div>` : ""}
+        ${pts ? `<ul class="pts">${pts.map((p) => `<li>${h(p)}</li>`).join("")}</ul><span class="ai">AIのまとめ</span>`
+          : `${it.summary && !it.summary.startsWith("出典") ? `<div class="s">${h(it.summary)}</div>` : ""}<span class="wait">（AIのまとめは順番に作っています）</span>`}
         ${st ? `<span class="stock">📦 在庫の車種：${h(st.name)}</span>` : ""}
       </div></a>`;
-  }).join("");
+  };
+  // おすすめ：中古車・オークションなど仕事に関係しそうな記事（直近7日・おすすめ度の高い順に6本）
+  const picks = !nw.cat && !nw.src && !q ? base.filter((it) => (it.score || 0) + (stockOf(it) ? 2 : 0) >= 4 && Date.now() - Date.parse(it.published_at) < 7 * 864e5)
+    .sort((a, b) => ((b.score || 0) + (stockOf(b) ? 2 : 0)) - ((a.score || 0) + (stockOf(a) ? 2 : 0)) || b.published_at.localeCompare(a.published_at)).slice(0, 6) : [];
+  $("nwPick").hidden = !picks.length;
+  $("nwPick").innerHTML = picks.length ? `<h3>⭐ おすすめ（中古車・オークション・相場など）</h3><div class="nw-grid">${picks.map((it) => card(it, true)).join("")}</div>` : "";
+  const pickSet = new Set(picks.map((x) => x.url));
+  $("nwList").innerHTML = list.filter((it) => !pickSet.has(it.url)).slice(0, 200).map((it) => card(it, false)).join("");
   $("nwEmpty").hidden = list.length > 0;
   const t = nw.fetchedAt ? new Date(nw.fetchedAt) : null;
   $("nwInfo").textContent = `${list.length}件` + (t ? `｜最終取得 ${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}（30分ごとに自動で更新）` : "");

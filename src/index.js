@@ -2,7 +2,7 @@ import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
 import { REVIEW_ADDED_COLUMNS, handleReview, loadPriceUnits, fixPriceUnit } from "./review.js";
-import { handleNews, refreshNews } from "./news.js";
+import { handleNews, refreshNews, summarizeNews } from "./news.js";
 import { TURNOVER_SCHEMA, TURNOVER_ADDED_COLUMNS, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -348,6 +348,7 @@ export default {
     // 毎時：自動車ニュースを取り直す ／ 毎日 0:05：待たせていたページを読み取りに回す
     if (event.cron === "5 15 * * *") await releaseWaiting(env);
     await refreshNews(env).catch(() => {});
+    await summarizeNews(env, 15).catch(() => {});
   },
 
   async queue(batch, env) {
@@ -355,7 +356,7 @@ export default {
     await Promise.all(batch.messages.map((m) => processPage(env, m)));
   },
 
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const denied = await checkAuth(request, env, url);
     if (denied) return denied;
@@ -590,7 +591,7 @@ export default {
 
       // 自動車ニュース
       if (path === "/api/news") {
-        const res = await handleNews(request, env, url);
+        const res = await handleNews(request, env, url, ctx);
         if (res) return res;
       }
 

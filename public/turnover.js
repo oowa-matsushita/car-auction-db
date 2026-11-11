@@ -1,8 +1,17 @@
 "use strict";
 // ---------- タブの切り替え（#ledger / #turnover） ----------
 const TABS = ["ledger", "turnover", "review", "news"];
+// ベータ機能（ニュースのタブ）。右上の「ベータ」ボタンで ON/OFF（このパソコンに覚える。はじめは OFF）
+const BETA_TABS = ["news"];
+const betaOn = () => { try { return localStorage.getItem("mmsBeta") === "1"; } catch { return false; } };
+function applyBeta() {
+  const on = betaOn();
+  BETA_TABS.forEach((t) => { const b = document.querySelector(`.tabs button[data-tab="${t}"]`); if (b) b.hidden = !on; });
+  const bb = document.getElementById("betaBtn");
+  if (bb) { bb.textContent = on ? "ベータ ON" : "ベータ OFF"; bb.classList.toggle("on", on); }
+}
 function showTab(name) {
-  if (!TABS.includes(name)) name = "ledger";
+  if (!TABS.includes(name) || (BETA_TABS.includes(name) && !betaOn())) name = "ledger";
   for (const t of TABS) document.getElementById("tab-" + t).hidden = t !== name;
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
@@ -11,6 +20,14 @@ function showTab(name) {
   if (name === "news" && typeof loadNews === "function") loadNews();
 }
 document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+applyBeta();
+document.getElementById("betaBtn").onclick = () => {
+  const on = !betaOn();
+  try { localStorage.setItem("mmsBeta", on ? "1" : "0"); } catch {}
+  applyBeta();
+  if (!on && BETA_TABS.some((t) => !document.getElementById("tab-" + t).hidden)) showTab("ledger");
+  else if (on) showTab("news");
+};
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 
 // ---------- 回転率 ----------

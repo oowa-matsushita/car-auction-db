@@ -94,6 +94,15 @@
   .nw-card .new { color: #fff; background: #e53935; border-radius: 4px; padding: 0 5px; font-weight: 700; }
   .nw-card .t { font-weight: 700; font-size: 14px; line-height: 1.45; color: #13234a; }
   .nw-card .s { font-size: 12px; color: #556; line-height: 1.5; }
+  .nw-card .orig { font-size: 11px; color: #8a93a3; line-height: 1.4; }
+  .nw-card ul.pts { margin: 0; padding-left: 18px; font-size: 13px; color: #223; line-height: 1.55; }
+  .nw-card ul.pts li { margin: 1px 0; }
+  .nw-card .ai { align-self: flex-start; font-size: 10px; color: #7c5cff; border: 1px solid #c9bbff; border-radius: 4px; padding: 0 5px; }
+  .nw-card .wait { font-size: 11px; color: #a0a8b6; }
+  .nw-pick { margin-bottom: 16px; padding: 12px; border-radius: 12px; background: linear-gradient(135deg, #fff7ec, #fff); border: 1px solid #f6d3a8; }
+  .nw-pick h3 { margin: 0 0 10px; font-size: 15px; color: #8a4b00; }
+  .nw-pick .nw-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .nw-card .hot { color: #fff; background: #f26b1d; border-radius: 4px; padding: 0 5px; font-weight: 700; }
   .nw-card .stock { align-self: flex-start; font-size: 11px; font-weight: 700; color: #8a4b00; background: #fff1d6; border: 1px solid #f3c27a; border-radius: 10px; padding: 1px 8px; }
   /* 設定画面 */
   #wxDlg { width: min(760px, 96vw); border-radius: 10px; }
@@ -121,7 +130,11 @@
   .wx-row { font-size: 14px; }
   .wx-err { color: #c62828; font-weight: 700; min-height: 1.2em; font-size: 13px; }
   .wx-foot { display: flex; align-items: center; gap: 8px; }
-  .tabs .logout { margin-left: auto; align-self: center; margin-right: 12px; color: #c9d4e6; font-size: 12px; text-decoration: none; border: 1px solid #4a5b80; border-radius: 12px; padding: 2px 10px; }
+  .tabs button[hidden] { display: none !important; }
+  .tabs .beta-btn { align-self: center; margin: 0 12px 0 0; background: transparent; color: #8fa0c0; font-size: 11px; border: 1px dashed #4a5b80; border-radius: 12px; padding: 2px 10px; cursor: pointer; }
+  .tabs .beta-btn.on { background: #7c5cff; color: #fff; border: 1px solid #7c5cff; }
+  .beta-tag { font-size: 10px; background: #7c5cff; color: #fff; border-radius: 6px; padding: 0 4px; margin-left: 2px; }
+  .tabs .logout { margin-left: auto; align-self: center; margin-right: 8px; color: #c9d4e6; font-size: 12px; text-decoration: none; border: 1px solid #4a5b80; border-radius: 12px; padding: 2px 10px; }
   .tabs .logout:hover { background: #22386b; color: #fff; }
   .rv-badge { background: var(--orange); color: #fff; border-radius: 9px; padding: 0 6px; font-size: 11px; margin-left: 2px; }
   .rv-badge:empty { display: none; }
@@ -268,8 +281,9 @@
   <button data-tab="ledger">📋 仕入れ台帳</button>
   <button data-tab="turnover">🔄 回転率</button>
   <button data-tab="review">✅ 確認リスト <span id="rvBadge" class="rv-badge"></span></button>
-  <button data-tab="news">📰 ニュース</button>
+  <button data-tab="news" hidden>📰 ニュース <span class="beta-tag">β</span></button>
   <a href="/logout" class="logout" title="ログアウト（次に開くときはIDとパスワードが必要です）">ログアウト</a>
+  <button type="button" id="betaBtn" class="beta-btn" title="ためしに使える機能（ニュース）を表示します">ベータ OFF</button>
 </nav>
 
 <section class="tab" id="tab-ledger">
@@ -333,7 +347,7 @@
     <button class="btn btn-sub" id="nwReload" style="font-size:12px;padding:4px 12px">⟳ 最新にする</button>
   </div>
   <div class="nw-bar"><div id="nwCats" class="nw-chips"></div><div id="nwSrcs" class="nw-chips"></div></div>
-  <div class="nw-body"><div id="nwList" class="nw-grid"></div><div id="nwEmpty" class="empty" hidden>該当するニュースがありません</div></div>
+  <div class="nw-body"><div id="nwPick" class="nw-pick" hidden></div><div id="nwList" class="nw-grid"></div><div id="nwEmpty" class="empty" hidden>該当するニュースがありません</div></div>
 </section>
 <section class="tab" id="tab-review" hidden>
   <div class="rv-left">
