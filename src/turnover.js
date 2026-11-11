@@ -216,6 +216,8 @@ export async function handleTurnover(request, env, url) {
       if (b && b.reset) { await db.prepare("DELETE FROM app_settings WHERE key = 'weather'").run(); return json({ ok: true, weather: null }); }
       if (!b || !nums(b.rate, 3) || !nums(b.gross, 3) || !nums(b.levels, 4)) return json({ error: "基準の数字が正しくありません" }, 400);
       const v = { rate: b.rate.map(Number), gross: b.gross.map(Number), levels: b.levels.map(Number) };
+      // グラフの上限（回転率 %・台粗利 万円）。無ければ はじめの値（80% / 40万円）
+      if (b.chart && Number(b.chart.rate) > 0 && Number(b.chart.gross) > 0) v.chart = { rate: Number(b.chart.rate), gross: Number(b.chart.gross) };
       await db.prepare("INSERT INTO app_settings (key, value) VALUES ('weather', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')").bind(JSON.stringify(v)).run();
       return json({ ok: true, weather: v });
     }

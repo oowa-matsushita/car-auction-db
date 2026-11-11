@@ -127,7 +127,8 @@ $("tvModelHead").addEventListener("click", (e) => {
 // rate：回転率(%) の 3点/2点/1点 の下限、gross：平均台粗利(万円) の 3点/2点/1点 の下限
 // levels：快晴/晴れ/曇り/雨 になる合計点の下限（それ未満は台風）
 const WX_DEFAULT = { rate: [40, 35, 30], gross: [15, 10, 5], levels: [6, 4, 3, 1] };
-let wxCfg = structuredClone(WX_DEFAULT);
+const CHART_DEFAULT = { rate: 80, gross: 40 }; // グラフの上限（回転率 %・台粗利 万円）
+let wxCfg = { ...structuredClone(WX_DEFAULT), chart: { ...CHART_DEFAULT } };
 const WX_LOOK = [["🌞", "快晴"], ["🌤️", "晴れ"], ["☁️", "曇り"], ["🌧️", "雨"], ["🌀", "台風"]];
 const stepScore = (v, cuts) => { const i = cuts.findIndex((c) => v >= c); return i < 0 ? 0 : 3 - i; };
 const rateScore = (r) => stepScore(r * 100 + 1e-9, wxCfg.rate);
@@ -150,11 +151,13 @@ async function loadWx() {
     const d = await (await fetch("/api/settings/weather")).json();
     wxCfg = d.weather || structuredClone(WX_DEFAULT);
   } catch {}
+  if (!wxCfg.chart) wxCfg.chart = { ...CHART_DEFAULT };
   wxLegend(); if (typeof tvModels !== "undefined" && tvModels.length) drawModels();
+  if (typeof drawPanelChart === "function") drawPanelChart();
 }
 function openWx() {
   const c = wxCfg, inp = (id, v, step) => `<input id="${id}" type="number" step="${step}" value="${v}" style="width:64px;padding:2px 6px">`;
-  $("wxForm").innerHTML = `<div class="hd"><b>天気の基準</b><span style="flex:1"></span></div>
+  $("wxForm").innerHTML = `<div class="hd"><b>設定（天気の基準・グラフの上限）</b><span style="flex:1"></span></div>
     <div style="padding:14px 18px;line-height:2.2">
       <div style="font-weight:700">回転率</div>
       3点：${inp("wxR0", c.rate[0], 0.1)}% 以上　2点：${inp("wxR1", c.rate[1], 0.1)}% 以上　1点：${inp("wxR2", c.rate[2], 0.1)}% 以上　（それ未満は0点）
@@ -162,6 +165,8 @@ function openWx() {
       3点：${inp("wxG0", c.gross[0], 0.1)}万円 以上　2点：${inp("wxG1", c.gross[1], 0.1)}万円 以上　1点：${inp("wxG2", c.gross[2], 0.1)}万円 以上　（それ未満は0点）
       <div style="font-weight:700;margin-top:6px">天気（2つの点数の合計 0〜6点）</div>
       🌞快晴：${inp("wxL0", c.levels[0], 1)}点 以上　🌤️晴れ：${inp("wxL1", c.levels[1], 1)}点 以上　☁️曇り：${inp("wxL2", c.levels[2], 1)}点 以上　🌧️雨：${inp("wxL3", c.levels[3], 1)}点 以上　（それ未満は<span class="wx-red"><i>🌀</i>台風</span>）
+      <div style="font-weight:700;margin-top:10px;padding-top:8px;border-top:1px solid #e3e8ef">グラフの上限（どの車でも同じ目盛り）</div>
+      回転率：${inp("wxCR", c.chart.rate, 5)}% まで　平均台粗利：${inp("wxCG", c.chart.gross, 5)}万円 まで　<span class="tv-note">（超える値は端に▲で表示）</span>
       <div id="wxErr" style="color:#c62828;min-height:1.5em"></div>
       <div style="display:flex;gap:8px">
         <button type="button" class="btn btn-ok" id="wxSave">保存</button>
@@ -174,14 +179,15 @@ function openWx() {
   const v = (id) => Number($(id).value);
   $("wxClose").onclick = () => $("wxDlg").close();
   $("wxReset").onclick = async () => {
-    if (!confirm("はじめの基準（回転率40/35/30%、台粗利15/10/5万円、快晴6・晴れ4・曇り3・雨1点）に戻しますか？")) return;
+    if (!confirm("はじめの基準（回転率40/35/30%、台粗利15/10/5万円、快晴6・晴れ4・曇り3・雨1点、グラフの上限 80%・40万円）に戻しますか？")) return;
     await fetch("/api/settings/weather", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ reset: true }) });
     $("wxDlg").close(); loadWx();
   };
   $("wxSave").onclick = async () => {
-    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")] };
+    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") } };
     const desc = (a) => a.every((x, i) => i === 0 || a[i - 1] > x);
-    const err = [...b.rate, ...b.gross, ...b.levels].some((x) => !Number.isFinite(x)) ? "空欄があります"
+    const err = [...b.rate, ...b.gross, ...b.levels, b.chart.rate, b.chart.gross].some((x) => !Number.isFinite(x)) ? "空欄があります"
+      : !(b.chart.rate > 0 && b.chart.gross > 0) ? "グラフの上限は 0 より大きい数を入れてください"
       : !desc(b.rate) ? "回転率は 3点 ＞ 2点 ＞ 1点 の順に大きくしてください"
       : !desc(b.gross) ? "台粗利は 3点 ＞ 2点 ＞ 1点 の順に大きくしてください"
       : !desc(b.levels) || b.levels[0] > 6 || b.levels[3] < 0 ? "天気の点数は 快晴 ＞ 晴れ ＞ 曇り ＞ 雨 の順に、0〜6点の間で入れてください" : "";
@@ -319,8 +325,17 @@ const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", GROS
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
 // 回転率と平均台粗利を1つのグラフに（左の目盛り＝回転率、右の目盛り＝台粗利）
 // 目盛りはどの車でも同じ（回転率 0〜80%、台粗利 0〜40万円）。はみ出す値は上下の端に▲▼で印を付け、本当の値を書く
+// 上限は「設定」で変えられる（wxCfg.chart）。横線の本数は、両方の目盛りがきりのいい数になる本数を選ぶ
 const DUAL = { rateMax: 0.8, grossMax: 400000, div: 8 };
+function setDualScale() {
+  const c = wxCfg.chart || CHART_DEFAULT, R = c.rate, G = c.gross;
+  DUAL.rateMax = R / 100; DUAL.grossMax = G * 10000;
+  const ok = (x) => Math.abs(x - Math.round(x)) < 1e-9;
+  DUAL.div = [8, 10, 5, 6, 4, 7, 9, 12].find((d) => ok(R / d) && ok(G / d)) || [8, 10, 5, 6, 4].find((d) => ok(R / d) || ok(G / d)) || 8;
+}
+const tick = (v) => (Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(1));
 function dualChartSvg(points, w, h) {
+  setDualScale();
   const padL = 46, padR = 50, padT = 24, padB = 40;
   const iw = w - padL - padR, ih = h - padT - padB;
   const yr = (v) => padT + ih - (Math.max(0, Math.min(1, v / DUAL.rateMax))) * ih;
@@ -330,8 +345,8 @@ function dualChartSvg(points, w, h) {
   for (let k = 0; k <= DUAL.div; k++) {
     const yy = padT + ih - (ih * k) / DUAL.div;
     g += `<line x1="${padL}" x2="${w - padR}" y1="${yy}" y2="${yy}" stroke="${GRID}" stroke-width="1"/>`;
-    g += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="${BAR}" font-weight="700">${Math.round((DUAL.rateMax * 100 * k) / DUAL.div)}%</text>`;
-    g += `<text x="${w - padR + 6}" y="${yy + 4}" font-size="10" fill="${GROSS}" font-weight="700">${Math.round((DUAL.grossMax / 10000) * k / DUAL.div)}万</text>`;
+    g += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="${BAR}" font-weight="700">${tick((DUAL.rateMax * 100 * k) / DUAL.div)}%</text>`;
+    g += `<text x="${w - padR + 6}" y="${yy + 4}" font-size="10" fill="${GROSS}" font-weight="700">${tick((DUAL.grossMax / 10000) * k / DUAL.div)}万</text>`;
   }
   points.forEach((p, i) => { g += `<text x="${cx(i)}" y="${padT + ih + 16}" text-anchor="middle" font-size="10" fill="${INK2}">${shortMonth(p.month, i === 0)}</text>`; });
   // 凡例
