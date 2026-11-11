@@ -255,7 +255,7 @@ async function importInventory(files) {
 }
 dropZone($("dropInv"), $("inInv"), importInventory);
 
-// ---------- 回転率の推移グラフ（折れ線：その車＝実線、全体＝点線） ----------
+// ---------- 回転率と台粗利の推移グラフ ----------
 let tvHistory = null;
 let tvHistSeq = 0;
 async function loadHistory() {
@@ -264,33 +264,54 @@ async function loadHistory() {
 }
 const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", GROSS = "#e0702a";
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
-// points: [{month, rate, opening, sold, all}]（all は全体の回転率）
-// 1本の折れ線グラフ（key の値を fmt で表示。各点に値を書く）
-function lineChartSvg(points, { w, h, key, fmt, axisFmt, color, floor = 0 }) {
-  const padL = 52, padR = 24, padT = 22, padB = 24;
+// 回転率と平均台粗利を1つのグラフに（左の目盛り＝回転率、右の目盛り＝台粗利）
+// 目盛りはどの車でも同じ（回転率 0〜80%、台粗利 0〜40万円）。はみ出す値は上下の端に▲▼で印を付け、本当の値を書く
+const DUAL = { rateMax: 0.8, grossMax: 400000, div: 8 };
+function dualChartSvg(points, w, h) {
+  const padL = 46, padR = 50, padT = 24, padB = 40;
   const iw = w - padL - padR, ih = h - padT - padB;
-  const vals = points.map((p) => p[key]).filter((v) => v != null);
-  const maxV = Math.max(floor, ...vals) * 1.15 || 1, minV = Math.min(0, ...vals);
-  const step = niceStepAny(maxV - minV), top = Math.ceil(maxV / step) * step, bot = Math.floor(minV / step) * step;
-  const y = (v) => padT + ih - ((v - bot) / (top - bot)) * ih;
-  const band = iw / Math.max(1, points.length);
-  const cx = (i) => padL + band * i + band / 2;
+  const yr = (v) => padT + ih - (Math.max(0, Math.min(1, v / DUAL.rateMax))) * ih;
+  const yg = (v) => padT + ih - (Math.max(0, Math.min(1, v / DUAL.grossMax))) * ih;
+  const band = iw / Math.max(1, points.length), cx = (i) => padL + band * i + band / 2;
   let g = "";
-  for (let v = bot; v <= top + 1e-9; v += step) {
-    g += `<line x1="${padL}" x2="${w - padR}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 && bot < 0 ? "#b8c0cc" : GRID}" stroke-width="1"/>`;
-    g += `<text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${INK2}">${axisFmt(v)}</text>`;
+  for (let k = 0; k <= DUAL.div; k++) {
+    const yy = padT + ih - (ih * k) / DUAL.div;
+    g += `<line x1="${padL}" x2="${w - padR}" y1="${yy}" y2="${yy}" stroke="${GRID}" stroke-width="1"/>`;
+    g += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="${BAR}" font-weight="700">${Math.round((DUAL.rateMax * 100 * k) / DUAL.div)}%</text>`;
+    g += `<text x="${w - padR + 6}" y="${yy + 4}" font-size="10" fill="${GROSS}" font-weight="700">${Math.round((DUAL.grossMax / 10000) * k / DUAL.div)}万</text>`;
   }
-  points.forEach((p, i) => { g += `<text x="${cx(i)}" y="${h - 6}" text-anchor="middle" font-size="10" fill="${INK2}">${shortMonth(p.month, i === 0)}</text>`; });
-  const pts = points.map((p, i) => (p[key] == null ? null : [cx(i), y(p[key])]));
-  let cur = [];
-  const flush = () => { if (cur.length > 1) g += `<polyline points="${cur.map((q) => q.join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`; cur = []; };
-  for (const q of pts) { if (q) cur.push(q); else flush(); }
-  flush();
-  pts.forEach((q, i) => {
-    if (!q) return;
-    g += `<circle cx="${q[0]}" cy="${q[1]}" r="4.5" fill="${color}" stroke="${color}" stroke-width="2"/>`;
-    g += `<text x="${q[0]}" y="${q[1] - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="${INK}" stroke="#fff" stroke-width="3" paint-order="stroke">${fmt(points[i][key])}</text>`;
-  });
+  points.forEach((p, i) => { g += `<text x="${cx(i)}" y="${padT + ih + 16}" text-anchor="middle" font-size="10" fill="${INK2}">${shortMonth(p.month, i === 0)}</text>`; });
+  // 凡例
+  g += `<g font-size="11" fill="${INK}"><line x1="${padL}" x2="${padL + 18}" y1="${h - 8}" y2="${h - 8}" stroke="${BAR}" stroke-width="2.5"/><circle cx="${padL + 9}" cy="${h - 8}" r="3.5" fill="${BAR}"/><text x="${padL + 24}" y="${h - 4}">回転率（左の目盛り）</text>
+    <line x1="${padL + 150}" x2="${padL + 168}" y1="${h - 8}" y2="${h - 8}" stroke="${GROSS}" stroke-width="2.5" stroke-dasharray="5 3"/><rect x="${padL + 155.5}" y="${h - 11.5}" width="7" height="7" fill="${GROSS}"/><text x="${padL + 174}" y="${h - 4}">平均台粗利（右の目盛り）</text></g>`;
+  const series = [
+    { key: "rate", y: yr, max: DUAL.rateMax, color: BAR, dash: "", fmt: (v) => (v * 100).toFixed(1) + "%", above: true, shape: "circle" },
+    { key: "gross_avg", y: yg, max: DUAL.grossMax, color: GROSS, dash: "5 3", fmt: (v) => (v / 10000).toFixed(1) + "万", above: false, shape: "rect" },
+  ];
+  const labels = [];
+  for (const s of series) {
+    const pts = points.map((p, i) => (p[s.key] == null ? null : [cx(i), s.y(p[s.key]), p[s.key]]));
+    let cur = [];
+    const flush = () => { if (cur.length > 1) g += `<polyline points="${cur.map((q) => q[0] + "," + q[1]).join(" ")}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-dasharray="${s.dash}" stroke-linejoin="round"/>`; cur = []; };
+    for (const q of pts) { if (q) cur.push(q); else flush(); }
+    flush();
+    pts.forEach((q) => {
+      if (!q) return;
+      const [x, y, v] = q, over = v > s.max, under = v < 0;
+      if (over || under) g += `<text x="${x}" y="${over ? y + 4 : y + 4}" text-anchor="middle" font-size="12" fill="${s.color}">${over ? "▲" : "▼"}</text>`;
+      else if (s.shape === "circle") g += `<circle cx="${x}" cy="${y}" r="4.5" fill="${s.color}"/>`;
+      else g += `<rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="${s.color}"/>`;
+      labels.push({ x, y, text: s.fmt(v), color: s.color, up: s.above });
+    });
+  }
+  // 数字が重ならないように、同じ月で近いときは上下に分ける
+  for (const l of labels) {
+    const other = labels.find((o) => o !== l && o.x === l.x);
+    let up = l.up;
+    if (other && Math.abs(other.y - l.y) < 22) up = l.y < other.y || (l.y === other.y && l.up);
+    const ty = up ? l.y - 9 : l.y + 17;
+    g += `<text x="${l.x}" y="${Math.max(12, Math.min(padT + ih - 2, ty))}" text-anchor="middle" font-size="11" font-weight="700" fill="${l.color}" stroke="#fff" stroke-width="3" paint-order="stroke">${l.text}</text>`;
+  }
   points.forEach((p, i) => { g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${ih}" fill="transparent"/>`; });
   return `<svg class="tv-chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">${g}</svg>`;
 }
@@ -312,11 +333,7 @@ function showChart(key) {
   if (!pts.length) return;
   $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率と台粗利の推移`;
   const w = Math.min(820, $("tvChartBody").clientWidth || 820);
-  $("tvChartBody").innerHTML =
-    `<div class="tv-note" style="font-weight:700;color:${INK}">回転率</div>` +
-    lineChartSvg(pts, { w, h: 220, key: "rate", fmt: (v) => (v * 100).toFixed(1) + "%", axisFmt: (v) => Math.round(v * 100) + "%", color: BAR, floor: 0.1 }) +
-    `<div class="tv-note" style="font-weight:700;color:${INK};margin-top:6px">平均台粗利</div>` +
-    lineChartSvg(pts, { w, h: 200, key: "gross_avg", fmt: (v) => (v / 10000).toFixed(1) + "万", axisFmt: (v) => Number((v / 10000).toFixed(1)) + "万", color: GROSS, floor: 100000 });
+  $("tvChartBody").innerHTML = dualChartSvg(pts, w, 300);
   $("tvChartTable").innerHTML = `<table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>平均台粗利</th></tr></thead><tbody>` +
     pts.map((p) => `<tr><td>${monthLabel(p.month)}</td><td class="n">${p.opening}台</td><td class="n">${p.sold}台</td><td class="n">${pct(p.rate)}</td><td class="n">${man1(p.gross_avg)}</td></tr>`).join("") + "</tbody></table>";
   const tip = $("tvTip");
