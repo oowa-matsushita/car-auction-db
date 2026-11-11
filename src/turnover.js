@@ -11,6 +11,7 @@ export const TURNOVER_ADDED_COLUMNS = [
   "ALTER TABLE sales_items ADD COLUMN customer TEXT",
   "ALTER TABLE sales_items ADD COLUMN channel TEXT",
   "ALTER TABLE sales_items ADD COLUMN cost INTEGER",
+  "ALTER TABLE inv_items ADD COLUMN grade TEXT",
 ];
 
 export const TURNOVER_SCHEMA = [
@@ -36,8 +37,9 @@ const HEADER_MAP = {
   "予定売価本体予定": "planned_price", "予定売価": "planned_price",
   "仕入金額": "cost",
   "入庫担当": "staff",
+  "グレード": "grade",
 };
-const COLS = ["stock_no", "maker", "car_name", "first_reg", "inspection_expiry", "color", "mileage_km", "model_code", "chassis_no", "planned_price", "cost", "staff"];
+const COLS = ["stock_no", "maker", "car_name", "first_reg", "inspection_expiry", "color", "mileage_km", "model_code", "chassis_no", "planned_price", "cost", "staff", "grade"];
 const NUM = new Set(["mileage_km", "planned_price", "cost"]);
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -328,7 +330,7 @@ export async function handleTurnover(request, env, url) {
         year: inv?.first_reg || (veh?.year ? String(veh.year) : ""),
         mileage_km: inv?.mileage_km ?? veh?.mileage_km ?? null,
         color: inv?.color || veh?.color || "",
-        grade: veh?.grade || "",
+        grade: inv?.grade || veh?.grade || "",
         price: r.price, cost: r.cost, gross: grossOf(r, tax), customer: r.customer, channel: r.channel, linked: !!inv,
       });
     }
