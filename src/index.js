@@ -173,16 +173,52 @@ function getCookie(request, name) {
 }
 const LOGIN_PAGE = (msg = "") => `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MMS ログイン</title><style>
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#13234a;font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif}
-form{background:#fff;border-radius:12px;padding:28px 30px;width:min(340px,90vw);box-shadow:0 10px 30px rgba(0,0,0,.35)}
-h1{margin:0 0 4px;font-size:22px;color:#13234a;letter-spacing:2px}p.s{margin:0 0 18px;color:#667;font-size:13px}
-label{display:block;font-size:13px;color:#456;margin:10px 0 4px}input{width:100%;box-sizing:border-box;font-size:16px;padding:9px 10px;border:1px solid #b9c3d1;border-radius:6px}
-button{margin-top:18px;width:100%;padding:10px;font-size:16px;font-weight:700;color:#fff;background:#f26b1d;border:0;border-radius:6px;cursor:pointer}
-.e{color:#c62828;font-size:13px;margin-top:10px;min-height:1em}</style></head><body>
-<form method="post" action="/login"><h1>MMS</h1><p class="s">IDとパスワードを入れてください</p>
-<label for="id">ID</label><input id="id" name="id" autocomplete="username" autofocus required>
-<label for="pw">パスワード</label><input id="pw" name="pw" type="password" autocomplete="current-password" required>
-<button type="submit">ログイン</button><div class="e">${msg}</div></form></body></html>`;
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  font-family:system-ui,-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;color:#13234a;
+  background:radial-gradient(1200px 700px at 15% 10%,#24407e 0%,transparent 60%),radial-gradient(900px 600px at 90% 90%,#0e7c86 0%,transparent 55%),linear-gradient(160deg,#0b1530 0%,#13234a 55%,#0b1530 100%)}
+.orb{position:fixed;border-radius:50%;filter:blur(60px);opacity:.55;animation:float 14s ease-in-out infinite}
+.o1{width:380px;height:380px;background:#f26b1d;top:-120px;right:-80px}
+.o2{width:320px;height:320px;background:#10b8c4;bottom:-120px;left:-60px;animation-delay:-5s}
+.o3{width:200px;height:200px;background:#7c5cff;top:55%;left:58%;animation-delay:-9s;opacity:.35}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-25px) scale(1.08)}}
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(circle at 50% 50%,#000 30%,transparent 75%)}
+.card{position:relative;width:min(380px,92vw);padding:34px 32px 26px;border-radius:20px;background:rgba(255,255,255,.92);
+  box-shadow:0 30px 60px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.4) inset;backdrop-filter:blur(14px);animation:rise .6s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:none}}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.mark{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#f26b1d,#ff9a3d);box-shadow:0 8px 18px rgba(242,107,29,.45)}
+.mark svg{width:26px;height:26px}
+h1{margin:0;font-size:28px;letter-spacing:6px;font-weight:800;background:linear-gradient(90deg,#13234a,#24407e);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin:0 0 22px;color:#6b7690;font-size:13px;letter-spacing:.5px}
+.f{position:relative;margin-top:14px}
+.f svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:#8a96b0;fill:none;stroke-width:2;transition:stroke .2s}
+.f input{width:100%;font-size:16px;padding:14px 44px 14px 42px;border:1.5px solid #d6dce8;border-radius:12px;background:#f7f9fc;outline:none;transition:all .2s;color:#13234a}
+.f input::placeholder{color:#9aa4b8}
+.f input:focus{border-color:#f26b1d;background:#fff;box-shadow:0 0 0 4px rgba(242,107,29,.15)}
+.f input:focus+svg,.f:focus-within svg{stroke:#f26b1d}
+.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:none;cursor:pointer;padding:6px;color:#8a96b0;font-size:13px}
+.eye:hover{color:#13234a}
+button.go{margin-top:22px;width:100%;padding:14px;font-size:16px;font-weight:700;letter-spacing:2px;color:#fff;border:0;border-radius:12px;cursor:pointer;
+  background:linear-gradient(135deg,#f26b1d,#ff8a3d);box-shadow:0 10px 22px rgba(242,107,29,.4);transition:transform .15s,box-shadow .15s}
+button.go:hover{transform:translateY(-1px);box-shadow:0 14px 26px rgba(242,107,29,.5)}
+button.go:active{transform:translateY(1px)}
+.e{margin-top:14px;min-height:1.2em;font-size:13px;color:#d32f2f;text-align:center;font-weight:600}
+.e:not(:empty){animation:shake .35s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.foot{margin-top:6px;text-align:center;font-size:11px;color:#9aa4b8;letter-spacing:1px}
+</style></head><body>
+<div class="grid"></div><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+<form class="card" method="post" action="/login">
+  <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h-1a1 1 0 0 1-1-1v-4l2-5h11l3 5h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/><path d="M9.5 17.5h5"/></svg></div><h1>MMS</h1></div>
+  <p class="sub">仕入れ・回転率の管理画面にログイン</p>
+  <div class="f"><input id="id" name="id" placeholder="ID" autocomplete="username" autofocus required><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+  <div class="f"><input id="pw" name="pw" type="password" placeholder="パスワード" autocomplete="current-password" required><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+    <button type="button" class="eye" onclick="const p=document.getElementById('pw');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'表示':'隠す'">表示</button></div>
+  <button class="go" type="submit">ログイン</button>
+  <div class="e">${msg}</div>
+  <div class="foot">© MMS</div>
+</form></body></html>`;
 // ログインしていなければ、ログイン画面（API は 401）を返す。ログインしていれば null
 async function checkAuth(request, env, url) {
   const path = url.pathname;
