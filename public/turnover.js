@@ -15,10 +15,9 @@ addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 // ---------- 回転率 ----------
 // 数える販売（小売＋業販 / 小売のみ / 業販のみ）。選んだものはこのブラウザに覚えておく
 const tvCh = () => $("tvCh").value;
-const tvQs = () => `ch=${tvCh()}&tax=${$("tvTax").value}`;
+// 台粗利は いつも「本体価格を税抜にして − 本体原価」で計算する
+const tvQs = () => `ch=${tvCh()}&tax=ex`;
 const man1 = (v) => (v == null ? "—" : (v / 10000).toFixed(1) + "万円");
-try { const v = localStorage.getItem("tvTax"); if (v) $("tvTax").value = v; } catch {}
-$("tvTax").onchange = () => { try { localStorage.setItem("tvTax", $("tvTax").value); } catch {} clearPanel(); loadTurnover(); };
 try { const v = localStorage.getItem("tvCh"); if (v) $("tvCh").value = v; } catch {}
 $("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch {} clearPanel(); loadTurnover(); };
 const yen = (v) => (v == null ? "" : Number(v).toLocaleString() + "円");
@@ -277,7 +276,7 @@ let tvHistory = null;
 let tvHistSeq = 0;
 async function loadHistory() {
   const seq = ++tvHistSeq;
-  try { const d = await (await fetch("/api/turnover/history?" + tvQs())).json(); if (seq === tvHistSeq) { tvHistory = d; if (tvSelKey && tvHistory.models[tvSelKey]) drawPanelChart(); else if (tvSelKey) clearPanel(); } } catch { if (seq === tvHistSeq) tvHistory = null; }
+  try { const d = await (await fetch("/api/turnover/history?" + tvQs())).json(); if (seq === tvHistSeq) { tvHistory = d; if (tvSelKey) drawPanelChart(); } } catch { if (seq === tvHistSeq) tvHistory = null; }
 }
 const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", GROSS = "#e0702a";
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
@@ -348,19 +347,19 @@ const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == nul
 
 // 押したとき：大きなグラフ
 function showChart(key) {
-  const pts = modelPoints(key);
-  if (!pts.length) return;
+  // 推移データの読み込み前に押しても、読み込み後にグラフを描く（loadHistory から drawPanelChart）
   tvSelKey = key;
   document.querySelectorAll("#tvModelRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.key === key));
-  $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率と台粗利の推移`;
-  drawPanelChart();
+  const name = tvHistory?.models[key]?.name || tvModels.find((m) => m.key === key)?.name || key;
+  $("tvChartTitle").textContent = `${name} の回転率と台粗利の推移`;
+  if (tvHistory) drawPanelChart(); else $("tvChartBody").innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">読み込み中…</div>';
   showCarSold(key);
 }
 // 下の枠の大きさに合わせてグラフを描く（枠の位置・大きさは固定）
 function drawPanelChart() {
   if (!tvSelKey) return;
   const pts = modelPoints(tvSelKey), box = $("tvChartBody");
-  if (!pts.length) return;
+  if (!pts.length) { box.innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">この車の推移データがありません</div>'; return; }
   box.innerHTML = dualChartSvg(pts, Math.max(320, box.clientWidth), Math.max(200, box.clientHeight));
 }
 // グラフにマウスを当てたときの数字（描き直しても効くよう、枠に1回だけ付ける）
@@ -389,7 +388,7 @@ function clearPanel() {
 // その車の、選んでいる月に売れた車の一覧
 async function showCarSold(key) {
   const month = tvMonth;
-  $("tvCarSoldTitle").textContent = `${monthLabel(month)}に売れた ${tvHistory.models[key]?.name || ""}`;
+  $("tvCarSoldTitle").textContent = `${monthLabel(month)}に売れた ${tvHistory?.models[key]?.name || tvModels.find((m) => m.key === key)?.name || ""}`;
   $("tvCarSoldRows").innerHTML = '<tr><td colspan="9" class="tv-dim">読み込み中…</td></tr>';
   const res = await fetch(`/api/turnover/${month}/model-sales?${tvQs()}&key=${encodeURIComponent(key)}`);
   const j = await res.json();
