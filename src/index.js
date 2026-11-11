@@ -1,6 +1,7 @@
 import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
+import { REVIEW_ADDED_COLUMNS, handleReview } from "./review.js";
 import { TURNOVER_SCHEMA, TURNOVER_ADDED_COLUMNS, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -145,7 +146,7 @@ function ensureSchema(db) {
   if (!schemaReady) {
     schemaReady = (async () => {
       await db.batch([...SCHEMA, ...TURNOVER_SCHEMA].map((q) => db.prepare(q)));
-      for (const q of [...ADDED_COLUMNS, ...TURNOVER_ADDED_COLUMNS]) await db.prepare(q).run().catch(() => {});
+      for (const q of [...ADDED_COLUMNS, ...TURNOVER_ADDED_COLUMNS, ...REVIEW_ADDED_COLUMNS]) await db.prepare(q).run().catch(() => {});
     })().catch((e) => { schemaReady = null; throw e; });
   }
   return schemaReady;
@@ -503,6 +504,12 @@ export default {
             "content-disposition": `attachment; filename="backup_${new Date().toISOString().slice(0, 10)}.tsv"`,
           },
         });
+      }
+
+      // 確認リスト
+      if (path.startsWith("/api/review")) {
+        const res = await handleReview(request, env, url);
+        if (res) return res;
       }
 
       // 回転率（月初在庫・販売台数）

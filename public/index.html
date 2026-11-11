@@ -42,6 +42,32 @@
   .scroll { overflow: auto; flex: 1; min-height: 120px; background: #fff; }
   #tab-ledger { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #tab-turnover { flex: 1; min-height: 0; overflow: auto; }
+  /* ---- 確認リスト ---- */
+  #tab-review { flex: 1; min-height: 0; display: flex; }
+  .rv-badge { background: var(--orange); color: #fff; border-radius: 9px; padding: 0 6px; font-size: 11px; margin-left: 2px; }
+  .rv-badge:empty { display: none; }
+  .rv-left { width: 460px; min-width: 340px; display: flex; flex-direction: column; border-right: 2px solid var(--line); background: #fff; }
+  .rv-head { padding: 8px 10px; background: var(--navy); color: #fff; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .rv-head select { font-size: 12px; }
+  .rv-list { flex: 1; overflow: auto; }
+  .rv-group { position: sticky; top: 0; z-index: 1; background: #e3e8ef; padding: 4px 10px; font-weight: 700; font-size: 12px; border-bottom: 1px solid var(--line); }
+  .rv-item { padding: 6px 10px; border-bottom: 1px solid #e6eaf0; cursor: pointer; }
+  .rv-item:hover { background: var(--hover); }
+  .rv-item.sel { background: #ffc978; }
+  .rv-item .t { font-weight: 700; }
+  .rv-item .s { color: #667; font-size: 11px; }
+  .rv-item .w { color: #b00; font-size: 12px; }
+  .rv-right { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #3b414c; }
+  .rv-form { background: #fff; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; border-bottom: 3px solid var(--navy); }
+  .rv-form label { display: flex; flex-direction: column; font-size: 11px; color: #456; }
+  .rv-form label input { width: 110px; }
+  .rv-form label.wide input { width: 260px; }
+  .rv-form .key input { background: #fff4d8; font-weight: 700; }
+  .rv-issues { width: 100%; color: #b00; font-size: 12px; }
+  .rv-sheet { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 6px; position: relative; }
+  .rv-sheet canvas { max-width: 100%; max-height: 100%; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+  .rv-tools { position: absolute; top: 8px; right: 10px; display: flex; gap: 4px; }
+  .rv-tools .btn { padding: 2px 8px; font-size: 12px; }
   #tab-ledger > .top, #tab-ledger > .bar { flex: none; }
   .tabs { flex: none; }
   tbody tr.sel, tbody tr.sel:hover { background: #ffc978; }
@@ -133,6 +159,7 @@
   <span class="logo">MMS</span>
   <button data-tab="ledger">📋 仕入れ台帳</button>
   <button data-tab="turnover">🔄 回転率</button>
+  <button data-tab="review">✅ 確認リスト <span id="rvBadge" class="rv-badge"></span></button>
 </nav>
 
 <section class="tab" id="tab-ledger">
@@ -184,6 +211,19 @@
   </div>
   <div id="sheetArea"><span id="sheetMsg">車両の行をクリックすると、ここに出品票が出ます（↑↓キーでも切り替えられます）</span><canvas id="sheetCv" hidden title="クリックで大きく表示"></canvas></div>
 </div>
+</section>
+
+<section class="tab" id="tab-review" hidden>
+  <div class="rv-left">
+    <div class="rv-head"><b>✅ 確認リスト</b><span id="rvCount" style="font-size:12px;color:#c9e6ee"></span><span style="flex:1"></span>
+      <select id="rvFilter"><option value="">すべての種類</option></select></div>
+    <div class="rv-list" id="rvList"></div>
+  </div>
+  <div class="rv-right">
+    <div class="rv-form" id="rvForm"><span style="color:#667">左の一覧から車を選んでください（↑↓キーでも移動できます）</span></div>
+    <div class="rv-sheet"><div class="rv-tools"><button class="btn btn-sub" id="rvRotL">⟲</button><button class="btn btn-sub" id="rvRotR">⟳</button><button class="btn btn-sub" id="rvBig">🔍 大きく見る</button></div>
+      <span id="rvMsg" style="color:#cfd6e2"></span><canvas id="rvCv" hidden></canvas></div>
+  </div>
 </section>
 
 <section class="tab" id="tab-turnover" hidden>
@@ -643,6 +683,7 @@ $("period").addEventListener("click", (e) => {
 load();
 watchProgress();
 </script>
+<script src="review.js"></script>
 <script src="turnover.js"></script>
 </body>
 </html>
