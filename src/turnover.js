@@ -237,7 +237,8 @@ export async function handleTurnover(request, env, url) {
       m.rate = m.sold != null && m.item_count ? m.sold / m.item_count : null;
       m.gross_avg = m.gross_n ? Math.round(m.gross_total / m.gross_n) : null;
     }
-    return json({ months, tax });
+    const forecast = await forecastOf(db, months, ch);
+    return json({ months, tax, forecast });
   }
 
   // 月初在庫CSVを取り込む（同じ月があれば入れ替え）
@@ -380,4 +381,48 @@ export async function handleTurnover(request, env, url) {
   }
 
   return null;
+}
+
+// ---- 当月の着地予想 ----------------------------------------------------------------
+// 祝日（内閣府の「国民の祝日」。振替休日・国民の休日を含む）
+const JP_HOLIDAYS = new Set([
+  "2026-01-01", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20", "2026-04-29", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06",
+  "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23", "2026-10-12", "2026-11-03", "2026-11-23",
+  "2027-01-01", "2027-01-11", "2027-02-11", "2027-02-23", "2027-03-22", "2027-04-29", "2027-05-03", "2027-05-04", "2027-05-05",
+  "2027-07-19", "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03", "2027-11-23",
+]);
+const dayStr = (y, mo, d) => `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const isOffDay = (s) => { const w = new Date(s + "T00:00:00Z").getUTCDay(); return w === 0 || w === 6 || JP_HOLIDAYS.has(s); };
+function daysOfMonth(month) {
+  const [y, mo] = month.split("-").map(Number), n = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  return Array.from({ length: n }, (_, i) => dayStr(y, mo, i + 1));
+}
+// 当月（日本時間）の販売台数から、月末の台数と回転率を予想する。
+// 土日祝は平日より売れるので、過去の月の「土日祝1日あたり ÷ 平日1日あたり」の比で重みを付ける。
+async function forecastOf(db, months, ch) {
+  const now = new Date(Date.now() + 9 * 3600e3), cur = now.toISOString().slice(0, 7);
+  const m = months.find((x) => x.month === cur);
+  if (!m || !m.sold) return null;
+  const { results } = await db.prepare(`SELECT month, contract_date AS d, COUNT(*) AS n FROM sales_items s WHERE 1=1 ${channelSql(ch)} GROUP BY month, contract_date`).all();
+  const byDay = {}, pastMonths = new Set();
+  let through = "";
+  for (const r of results) {
+    if (!r.d) continue;
+    byDay[r.d] = (byDay[r.d] || 0) + r.n;
+    if (r.month === cur) { if (r.d > through) through = r.d; } else pastMonths.add(r.month);
+  }
+  if (!through) return null;
+  // 過去の月から、土日祝と平日の売れ方の比を出す（データが少なければ 1.5 倍とみなす）
+  let offN = 0, offD = 0, wkN = 0, wkD = 0;
+  for (const pm of pastMonths) for (const d of daysOfMonth(pm)) { if (isOffDay(d)) { offN += byDay[d] || 0; offD++; } else { wkN += byDay[d] || 0; wkD++; } }
+  const ratio = offD && wkD && wkN && offN ? (offN / offD) / (wkN / wkD) : 1.5;
+  let elW = 0, elO = 0, restW = 0, restO = 0;
+  for (const d of daysOfMonth(cur)) { if (d <= through) (isOffDay(d) ? elO++ : elW++); else (isOffDay(d) ? restO++ : restW++); }
+  const done = elW + elO * ratio, total = done + restW + restO * ratio;
+  if (!done) return null;
+  const factor = total / done, sold = Math.round(m.sold * factor);
+  return {
+    month: cur, through, factor, sold, rate: m.item_count ? (m.sold * factor) / m.item_count : null,
+    ratio: Math.round(ratio * 100) / 100, rest_weekday: restW, rest_off: restO, done_weekday: elW, done_off: elO,
+  };
 }

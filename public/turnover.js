@@ -18,15 +18,18 @@ const tvCh = () => $("tvCh").value;
 const tvQs = () => `ch=${tvCh()}&tax=${$("tvTax").value}`;
 const man1 = (v) => (v == null ? "—" : (v / 10000).toFixed(1) + "万円");
 try { const v = localStorage.getItem("tvTax"); if (v) $("tvTax").value = v; } catch {}
-$("tvTax").onchange = () => { try { localStorage.setItem("tvTax", $("tvTax").value); } catch {} $("tvChartCard").hidden = true; loadTurnover(); };
+$("tvTax").onchange = () => { try { localStorage.setItem("tvTax", $("tvTax").value); } catch {} clearPanel(); loadTurnover(); };
 try { const v = localStorage.getItem("tvCh"); if (v) $("tvCh").value = v; } catch {}
-$("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch {} $("tvChartCard").hidden = true; loadTurnover(); };
+$("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch {} clearPanel(); loadTurnover(); };
 const yen = (v) => (v == null ? "" : Number(v).toLocaleString() + "円");
 const pct = (r) => (r == null ? "—" : (r * 100).toFixed(1) + "%");
 const monthLabel = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
 const tvLog = (s) => ($("tvLog").textContent = s);
 
-let tvMonth = null, tvModels = [];
+let tvMonth = null, tvModels = [], tvForecast = null, tvSelKey = null;
+// 当月の着地予想（回転率の右に出す）
+const fcTitle = (f) => `${f.through.slice(5).replace("-", "/")}までの販売から予想。残り 平日${f.rest_weekday}日・土日祝${f.rest_off}日（土日祝は平日の${f.ratio}倍売れる計算。過去の販売データから）`;
+const fcHtml = (rate, f) => (rate == null || !f ? "" : `<span class="tv-fc" title="${fcTitle(f)}">着地予想 ${pct(rate * f.factor)}</span>`);
 // 条件を続けて変えたとき、古い結果で上書きしないよう、最新の読み込みだけを使う
 let tvLoadSeq = 0, tvModelSeq = 0;
 async function loadTurnover() {
@@ -40,6 +43,7 @@ async function loadTurnover() {
   } catch (e) { tvLog("❌ 読み込みに失敗しました: " + e.message); return; }
   if (seq !== tvLoadSeq) return;
   const months = data.months || [];
+  tvForecast = data.forecast || null;
   const maxRate = Math.max(0.0001, ...months.map((m) => m.rate || 0));
   $("tvEmpty").hidden = months.length > 0;
   $("tvRows").innerHTML = months.map((m) => `
@@ -49,7 +53,7 @@ async function loadTurnover() {
       <td class="n">${m.sold == null ? '<span class="tv-dim">未登録</span>'
         : `<span class="tv-link" data-sales="${m.month}" title="販売データの一覧を見る">${m.sold.toLocaleString()}台</span>`
           + (m.sold_retail || m.sold_wholesale ? `<div class="tv-dim" style="font-size:11px">小売 ${m.sold_retail} / 業販 ${m.sold_wholesale}</div>` : "")}</td>
-      <td class="n tv-rate">${pct(m.rate)}</td>
+      <td class="n tv-rate">${pct(m.rate)}${tvForecast && tvForecast.month === m.month ? fcHtml(m.rate, tvForecast) + `<div class="tv-dim" style="font-size:11px;font-weight:400">販売 ${tvForecast.sold.toLocaleString()}台の見込み</div>` : ""}</td>
       <td class="n"><b>${man1(m.gross_avg)}</b>${m.gross_total != null ? `<div class="tv-dim" style="font-size:11px">合計 ${Math.round(m.gross_total / 10000).toLocaleString()}万円</div>` : ""}</td>
       <td><div class="tv-bar" style="width:${m.rate == null ? 0 : Math.max(2, (m.rate / maxRate) * 150)}px"></div></td>
       <td style="white-space:nowrap">${m.item_count == null ? "" : `<button class="btn btn-sub" data-del="${m.month}" style="padding:2px 6px">在庫</button>`}
@@ -74,6 +78,7 @@ async function showModels(month) {
   $("tvModelTitle").textContent = `車名ごとの回転率（${monthLabel(month)}）`;
   $("tvModelCard").hidden = false;
   drawModels();
+  if (tvSelKey) showCarSold(tvSelKey);
 }
 // 並べ替え（見出しを押すたびに 降順 ⇔ 昇順。値が無いものはいつも最後）
 const tvSort = { key: "rate", dir: "desc" };
@@ -178,11 +183,11 @@ function drawModels() {
   });
   const q = $("tvModelFilter").value.trim().normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "");
   const list = sortModels(tvModels).filter((m) => !q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q));
-  $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}">
+  $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}" class="${m.key === tvSelKey ? "sel" : ""}">
     <td>${h(m.name)}</td>
     <td class="n">${m.opening.toLocaleString()}台</td>
     <td class="n">${m.sold.toLocaleString()}台</td>
-    <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>
+    <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate) + (tvForecast && tvForecast.month === tvMonth ? fcHtml(m.rate, tvForecast) : "")}</td>
     <td class="n">${man1(m.gross_avg)}</td>
     ${(() => { const w = weatherOf(m); return w
       ? `<td class="tv-wx${w.label === "台風" ? " wx-red" : ""}" title="${w.label}（回転率${rateScore(m.rate)}点＋台粗利${grossScore(m.gross_avg)}点＝${w.score}点）"><span>${w.icon}</span>${w.label}</td>`
@@ -260,7 +265,7 @@ let tvHistory = null;
 let tvHistSeq = 0;
 async function loadHistory() {
   const seq = ++tvHistSeq;
-  try { const d = await (await fetch("/api/turnover/history?" + tvQs())).json(); if (seq === tvHistSeq) tvHistory = d; } catch { if (seq === tvHistSeq) tvHistory = null; }
+  try { const d = await (await fetch("/api/turnover/history?" + tvQs())).json(); if (seq === tvHistSeq) { tvHistory = d; if (tvSelKey && tvHistory.models[tvSelKey]) drawPanelChart(); else if (tvSelKey) clearPanel(); } } catch { if (seq === tvHistSeq) tvHistory = null; }
 }
 const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", GROSS = "#e0702a";
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
@@ -331,11 +336,10 @@ const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == nul
 function showChart(key) {
   const pts = modelPoints(key);
   if (!pts.length) return;
+  tvSelKey = key;
+  document.querySelectorAll("#tvModelRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.key === key));
   $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率と台粗利の推移`;
-  const w = Math.min(820, $("tvChartBody").clientWidth || 820);
-  $("tvChartBody").innerHTML = dualChartSvg(pts, w, 300);
-  $("tvChartTable").innerHTML = `<table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>平均台粗利</th></tr></thead><tbody>` +
-    pts.map((p) => `<tr><td>${monthLabel(p.month)}</td><td class="n">${p.opening}台</td><td class="n">${p.sold}台</td><td class="n">${pct(p.rate)}</td><td class="n">${man1(p.gross_avg)}</td></tr>`).join("") + "</tbody></table>";
+  drawPanelChart();
   const tip = $("tvTip");
   $("tvChartBody").querySelectorAll("svg").forEach((svg) => {
     svg.addEventListener("mousemove", (e) => {
@@ -348,9 +352,21 @@ function showChart(key) {
     });
     svg.addEventListener("mouseleave", () => (tip.style.display = "none"));
   });
-  $("tvChartCard").hidden = false;
-  $("tvChartCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
   showCarSold(key);
+}
+// 下の枠の大きさに合わせてグラフを描く（枠の位置・大きさは固定）
+function drawPanelChart() {
+  if (!tvSelKey) return;
+  const pts = modelPoints(tvSelKey), box = $("tvChartBody");
+  if (!pts.length) return;
+  box.innerHTML = dualChartSvg(pts, Math.max(320, box.clientWidth), Math.max(200, box.clientHeight));
+}
+addEventListener("resize", () => { if (!$("tab-turnover").hidden) drawPanelChart(); });
+function clearPanel() {
+  tvSelKey = null;
+  $("tvChartTitle").textContent = "回転率と台粗利の推移";
+  $("tvCarSoldTitle").textContent = ""; $("tvCarSoldNote").textContent = ""; $("tvCarSoldRows").innerHTML = "";
+  $("tvChartBody").innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">上の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div>';
 }
 
 // その車の、選んでいる月に売れた車の一覧
@@ -378,6 +394,5 @@ $("tvModelRows").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-key]");
   if (tr) showChart(tr.dataset.key);
 });
-$("tvChartClose").onclick = () => ($("tvChartCard").hidden = true);
 
 showTab(location.hash.slice(1) || "ledger");
