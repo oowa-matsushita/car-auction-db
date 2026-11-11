@@ -98,9 +98,10 @@ export function salesChannel(r) {
   return "retail";
 }
 // 回転率で数える販売の条件（ch: all=小売+業販 / retail / wholesale）
-// 台粗利 ＝ 車両本体価格 − 本体原価。tax=ex のときは本体価格（税込）を税抜にしてから引く
-export const grossSql = (tax) => (tax === "in" ? "(price - cost)" : "(ROUND(price / 1.1) - cost)");
-export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? r.price - r.cost : Math.round(r.price / 1.1) - r.cost) : null);
+// 台粗利 ＝ 本体価格（税抜）− 本体原価 − 1台あたりの経費（陸送など 税込3.3万円 ＝ 税抜3万円）
+export const GROSS_EXPENSE_IN = 33000, GROSS_EXPENSE_EX = 30000;
+export const grossSql = (tax) => (tax === "in" ? `(price - cost - ${GROSS_EXPENSE_IN})` : `(ROUND(price / 1.1) - cost - ${GROSS_EXPENSE_EX})`);
+export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? r.price - r.cost - GROSS_EXPENSE_IN : Math.round(r.price / 1.1) - r.cost - GROSS_EXPENSE_EX) : null);
 export function channelSql(ch) {
   if (ch === "retail") return "AND COALESCE(channel,'retail') = 'retail'";
   if (ch === "wholesale") return "AND channel = 'wholesale'";
