@@ -439,3 +439,80 @@ $("tvModelRows").addEventListener("click", (e) => {
 });
 
 showTab(location.hash.slice(1) || "ledger");
+
+// ---------- 仕入れ台帳：車の行にマウスを当てると、その車種の回転率と台粗利のグラフを出す ----------
+// 車名のまとめ方はサーバー（src/turnover.js の modelName）と同じ
+const MODEL_SERIES_C = [
+  { re: /^CX\s*[-ー－‐]?\s*\d/i, name: "CXシリーズ" },
+  { re: /^N\s*[-ー－‐]?\s*BOX/i, name: "N-BOX" },
+];
+const MODEL_SUFFIXES_C = ["新型", "旧型", "カスタム", "ハイブリッド", "スティングレー", "ハイウェイスター", "+スタイル", "PHEV", "PHV", "HV", "EV", "e:", "+"];
+function modelNameC(name) {
+  let s = String(name ?? "").normalize("NFKC").split(/[▼■●★☆◇◆※□△▲]/)[0];
+  s = s.replace(/ムーブ/g, "ムーヴ").replace(/\s+/g, " ").trim();
+  const series = MODEL_SERIES_C.find((x) => x.re.test(s));
+  if (series) return series.name;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const suf of MODEL_SUFFIXES_C) if (s.length > suf.length && s.toUpperCase().endsWith(suf.toUpperCase())) { s = s.slice(0, -suf.length).trim(); changed = true; }
+  }
+  return s;
+}
+const modelKeyC = (name) => modelNameC(name).toUpperCase().replace(/[\s\-‐－]/g, "");
+
+let ledgerTvLoading = null;
+function ensureTvData() {
+  if (tvHistory) return Promise.resolve();
+  if (!ledgerTvLoading) {
+    ledgerTvLoading = Promise.all([
+      loadHistory(),
+      wxCfg ? null : loadWx(),
+      fetch("/api/turnover?" + tvQs()).then((r) => r.json()).then((d) => { if (!tvForecast) tvForecast = d.forecast || null; }).catch(() => {}),
+    ]).finally(() => { ledgerTvLoading = null; });
+  }
+  return ledgerTvLoading;
+}
+let ledgerHoverTimer = null, ledgerHoverKey = null;
+function ledgerPopHtml(car) {
+  const key = modelKeyC(car);
+  const m = tvHistory?.models[key];
+  if (!m) return `<b>${h(modelNameC(car) || car || "（車名なし）")}</b><div class="tv-note" style="margin-top:4px">この車種は、月初在庫・販売データに見つかりません。</div>`;
+  const pts = modelPoints(key);
+  const last = [...pts].reverse().find((p) => p.rate != null || p.sold) || pts[pts.length - 1];
+  const w = last ? weatherOf(last) : null;
+  const fc = tvForecast && last && tvForecast.month === last.month && last.rate != null ? last.rate * tvForecast.factor : null;
+  return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><b>${h(m.name)}</b>
+      <span class="tv-note">${last ? monthLabel(last.month) + (fc != null ? "（途中）" : "") : ""}</span>
+      ${w ? `<span class="${w.label === "台風" ? "wx-red" : ""}" style="margin-left:auto;font-size:13px"><span>${w.icon}</span>${w.label}</span>` : ""}</div>
+    <div style="font-size:13px;margin:4px 0 2px">回転率 <b style="color:#0b6f78">${last ? pct(last.rate) : "—"}</b>
+      ${fc != null ? `<span class="tv-fc" style="margin-left:4px">着地予想 ${pct(fc)}</span>` : ""}
+      　台粗利 <b style="color:#c25a00">${last ? man1(last.gross_avg) : "—"}</b>
+      <div class="tv-note">月初在庫 ${last?.opening ?? 0}台・販売 ${last?.sold ?? 0}台</div></div>
+    ${dualChartSvg(pts, 380, 210)}`;
+}
+function placePop(pop, x, y) {
+  const r = pop.getBoundingClientRect();
+  let left = x + 18, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 18;
+  if (top + r.height > innerHeight - 8) top = Math.max(8, y - r.height - 14);
+  pop.style.left = Math.max(8, left) + "px"; pop.style.top = top + "px";
+}
+$("rows").addEventListener("mousemove", (e) => {
+  const tr = e.target.closest("tr[data-i]"), pop = $("tvPop");
+  if (!tr) { pop.style.display = "none"; return; }
+  const car = state.rows[tr.dataset.i]?.car_name;
+  if (pop.style.display === "block" && ledgerHoverKey === tr.dataset.i) { placePop(pop, e.clientX, e.clientY); return; }
+  pop.style.display = "none";
+  clearTimeout(ledgerHoverTimer);
+  const x = e.clientX, y = e.clientY, idx = tr.dataset.i;
+  ledgerHoverTimer = setTimeout(async () => {
+    await ensureTvData();
+    if (!tr.matches(":hover")) return;
+    ledgerHoverKey = idx;
+    pop.innerHTML = ledgerPopHtml(car);
+    pop.style.display = "block";
+    placePop(pop, x, y);
+  }, 350);
+});
+$("rows").addEventListener("mouseleave", () => { clearTimeout(ledgerHoverTimer); ledgerHoverKey = null; $("tvPop").style.display = "none"; });
+addEventListener("scroll", () => { $("tvPop").style.display = "none"; }, true);
