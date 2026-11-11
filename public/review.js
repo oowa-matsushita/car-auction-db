@@ -49,8 +49,17 @@ function selectReview(id, scroll) {
   $("rvForm").innerHTML = `<div class="rv-issues">⚠ ${r.issues.map(h).join("　⚠ ")}${r.review_reason ? `<span style="color:#667">　（メモ：${h(r.review_reason)}）</span>` : ""}</div>` +
     RV_FIELDS.map(([k, l, key, wide]) => `<label class="${key ? "key" : ""} ${wide ? "wide" : ""}">${l}<input data-f="${k}" value="${h(r[k] ?? "")}"></label>`).join("") +
     `<button class="btn btn-ok" id="rvSave">保存</button>
+     ${r.kind === "price" && r.bid_price_man >= 100 ? `<button class="btn btn-sub" id="rvThousand" title="この会場の金額は千円単位だと覚えて、同じ会場のほかの車も直します">千円単位として1/10にする（${h(r.auction_house || "会場")}を覚える）</button>` : ""}
      <button class="btn btn-main" id="rvOk" style="font-size:13px;padding:6px 14px" title="この車を確認済みにして一覧から外す">✔ 確認済み（次へ）</button>`;
   $("rvSave").onclick = () => saveReview(false);
+  if ($("rvThousand")) $("rvThousand").onclick = async () => {
+    const res = await fetch(`/api/review/${r.id}/thousand`, { method: "POST" });
+    const j = await res.json();
+    if (!res.ok) return alert(j.error || "直せませんでした");
+    alert(`スタート・落札金額を1/10にしました。\n${j.house}は「千円単位」と覚えました${j.others ? `（同じ会場のほかの車 ${j.others}台も直しました）` : ""}。`);
+    await loadReview(r.id);
+    if (typeof load === "function") load();
+  };
   $("rvOk").onclick = () => saveReview(true);
   $("rvForm").querySelectorAll("input").forEach((inp) => inp.addEventListener("keydown", (e) => { if (e.key === "Enter") saveReview(false); }));
   showReviewSheet(r);

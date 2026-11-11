@@ -1,7 +1,7 @@
 import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
-import { REVIEW_ADDED_COLUMNS, handleReview } from "./review.js";
+import { REVIEW_ADDED_COLUMNS, handleReview, loadPriceUnits, fixPriceUnit } from "./review.js";
 import { TURNOVER_SCHEMA, TURNOVER_ADDED_COLUMNS, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -236,7 +236,8 @@ async function processPage(env, msg) {
     const { reader, vehicles } = await readPage(env, new Uint8Array(await obj.arrayBuffer()));
     // 読み直しの場合に二重登録しないよう、そのページの分を入れ替える
     const stmts = [env.DB.prepare("DELETE FROM vehicles WHERE upload_id = ? AND page_no = ?").bind(upload_id, page_no)];
-    for (const v of vehicles) stmts.push(await insertVehicle(env.DB, { ...v, upload_id, page_no, pdf_key: up.pdf_key }));
+    const units = await loadPriceUnits(env.DB);
+    for (const v of vehicles) { fixPriceUnit(v, units); stmts.push(await insertVehicle(env.DB, { ...v, upload_id, page_no, pdf_key: up.pdf_key })); }
     const res = await env.DB.batch(stmts);
     const added = insertedCount(res.slice(1));
     await setPage({ status: "done", reader, vehicle_count: added, skipped: vehicles.length - added, error: null });
@@ -389,11 +390,12 @@ export default {
           h = h.trim();
           return map[h] || (FIELDS.includes(h) ? h : null) || (CSV_COLS.find(([, l]) => l === h) || [])[0] || null;
         });
-        const stmts = [];
+        const stmts = [], units = await loadPriceUnits(env.DB);
         for (const r of rows.slice(1)) {
           const v = {};
           header.forEach((f, i) => { if (f && f !== "upload_id") v[f] = r[i]; });
           if (v.review_reason && v.needs_review === undefined) v.needs_review = 1;
+          fixPriceUnit(v, units);
           stmts.push(await insertVehicle(env.DB, v));
         }
         let added = 0;
@@ -507,7 +509,7 @@ export default {
       }
 
       // 確認リスト
-      if (path.startsWith("/api/review")) {
+      if (path.startsWith("/api/review") || path === "/api/price-units") {
         const res = await handleReview(request, env, url);
         if (res) return res;
       }
