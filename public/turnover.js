@@ -185,117 +185,75 @@ async function loadHistory() {
   const seq = ++tvHistSeq;
   try { const d = await (await fetch("/api/turnover/history?" + tvQs())).json(); if (seq === tvHistSeq) tvHistory = d; } catch { if (seq === tvHistSeq) tvHistory = null; }
 }
-const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", AVG = "#8a94a6";
+const INK = "#172033", INK2 = "#5b6475", GRID = "#e3e8ef", BAR = "#10b8c4", GROSS = "#e0702a";
 const shortMonth = (m, first) => (first || m.endsWith("-01") ? `${m.slice(2, 4)}年` : "") + `${Number(m.slice(5))}月`;
-function niceStep(max) {
-  for (const s of [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2]) if (max / s <= 5) return s;
-  return Math.ceil(max / 5);
-}
 // points: [{month, rate, opening, sold, all}]（all は全体の回転率）
-function rateChartSvg(points, { w, h, big }) {
-  const padL = 40, padR = big ? 44 : 34, padT = 18, padB = 24;
+// 1本の折れ線グラフ（key の値を fmt で表示。各点に値を書く）
+function lineChartSvg(points, { w, h, key, fmt, axisFmt, color, floor = 0 }) {
+  const padL = 52, padR = 24, padT = 22, padB = 24;
   const iw = w - padL - padR, ih = h - padT - padB;
-  const maxV = Math.max(0.1, ...points.map((p) => p.rate || 0), ...points.map((p) => p.all || 0)) * 1.12;
-  const step = niceStep(maxV), top = Math.ceil(maxV / step) * step;
-  const y = (v) => padT + ih - (v / top) * ih;
-  const band = iw / Math.max(1, points.length), bw = Math.min(big ? 40 : 26, band * 0.6);
+  const vals = points.map((p) => p[key]).filter((v) => v != null);
+  const maxV = Math.max(floor, ...vals) * 1.15 || 1, minV = Math.min(0, ...vals);
+  const step = niceStepAny(maxV - minV), top = Math.ceil(maxV / step) * step, bot = Math.floor(minV / step) * step;
+  const y = (v) => padT + ih - ((v - bot) / (top - bot)) * ih;
+  const band = iw / Math.max(1, points.length);
   const cx = (i) => padL + band * i + band / 2;
   let g = "";
-  for (let v = 0; v <= top + 1e-9; v += step) {
-    g += `<line x1="${padL}" x2="${w - padR}" y1="${y(v)}" y2="${y(v)}" stroke="${GRID}" stroke-width="1"/>`;
-    g += `<text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${INK2}">${Math.round(v * 100)}%</text>`;
+  for (let v = bot; v <= top + 1e-9; v += step) {
+    g += `<line x1="${padL}" x2="${w - padR}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 && bot < 0 ? "#b8c0cc" : GRID}" stroke-width="1"/>`;
+    g += `<text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${INK2}">${axisFmt(v)}</text>`;
   }
-  points.forEach((p, i) => {
-    g += `<text x="${cx(i)}" y="${h - 6}" text-anchor="middle" font-size="10" fill="${INK2}">${shortMonth(p.month, i === 0)}</text>`;
+  points.forEach((p, i) => { g += `<text x="${cx(i)}" y="${h - 6}" text-anchor="middle" font-size="10" fill="${INK2}">${shortMonth(p.month, i === 0)}</text>`; });
+  const pts = points.map((p, i) => (p[key] == null ? null : [cx(i), y(p[key])]));
+  let cur = [];
+  const flush = () => { if (cur.length > 1) g += `<polyline points="${cur.map((q) => q.join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`; cur = []; };
+  for (const q of pts) { if (q) cur.push(q); else flush(); }
+  flush();
+  pts.forEach((q, i) => {
+    if (!q) return;
+    g += `<circle cx="${q[0]}" cy="${q[1]}" r="4.5" fill="${color}" stroke="${color}" stroke-width="2"/>`;
+    g += `<text x="${q[0]}" y="${q[1] - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="${INK}" stroke="#fff" stroke-width="3" paint-order="stroke">${fmt(points[i][key])}</text>`;
   });
-  // 折れ線（値がある月だけつなぐ）＋ 点。右端に名前を直接書く
-  const line = (key, color, dash, label, labelDy) => {
-    const pts = points.map((p, i) => (p[key] == null ? null : [cx(i), y(p[key])]));
-    const segs = [];
-    let cur = [];
-    for (const q of pts) { if (q) cur.push(q); else if (cur.length) { segs.push(cur); cur = []; } }
-    if (cur.length) segs.push(cur);
-    for (const sg of segs) {
-      if (sg.length > 1) g += `<polyline points="${sg.map((q) => q.join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2" ${dash ? 'stroke-dasharray="5 4"' : ""} stroke-linejoin="round"/>`;
-    }
-    pts.forEach((q) => { if (q) g += `<circle cx="${q[0]}" cy="${q[1]}" r="${big ? 4.5 : 4}" fill="${dash ? "#fff" : color}" stroke="${color}" stroke-width="2"/>`; });
-    const last = [...pts].reverse().find(Boolean);
-    if (last) g += `<text x="${last[0] + 8}" y="${last[1] + 4 + labelDy}" font-size="10" fill="${INK2}">${label}</text>`;
-    return last;
-  };
-  // 名前が重ならないよう、下にある線の名前を少し下げる
-  const lp0 = [...points].reverse().find((p) => p.rate != null), la0 = [...points].reverse().find((p) => p.all != null);
-  const carBelow = lp0 && la0 && lp0.rate < la0.all, close = lp0 && la0 && Math.abs(y(lp0.rate) - y(la0.all)) < 12;
-  line("all", AVG, true, "全体", close && !carBelow ? 8 : 0);
-  line("rate", BAR, false, "この車", close && carBelow ? 8 : 0);
-  // 各点に％を出す（上にある線は点の上、下にある線は点の下に書いて重ならないようにする）
-  const fs = big ? 11 : 9.5;
-  const label = (x, yv, v, above, bold) =>
-    `<text x="${x}" y="${above ? yv - 8 : yv + fs + 6}" text-anchor="middle" font-size="${fs}" ${bold ? 'font-weight="700"' : ""} fill="${bold ? INK : INK2}"
-       stroke="#fff" stroke-width="3" paint-order="stroke">${(v * 100).toFixed(1)}%</text>`;
-  points.forEach((p, i) => {
-    const carAbove = p.all == null || (p.rate != null && p.rate >= p.all);
-    if (p.rate != null) g += label(cx(i), y(p.rate), p.rate, carAbove, true);
-    if (p.all != null) g += label(cx(i), y(p.all), p.all, !carAbove || p.rate == null, false);
-  });
-  // マウス用の当たり判定（棒より広く）
-  if (big) points.forEach((p, i) => { g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${ih}" fill="transparent"/>`; });
+  points.forEach((p, i) => { g += `<rect class="hit" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${ih}" fill="transparent"/>`; });
   return `<svg class="tv-chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">${g}</svg>`;
+}
+function niceStepAny(range) {
+  const raw = range / 5, mag = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (raw <= m * mag) return m * mag;
+  return 10 * mag;
 }
 function modelPoints(key) {
   if (!tvHistory || !tvHistory.models[key]) return [];
   const pts = tvHistory.models[key].points;
-  return tvHistory.months.map((m) => ({ month: m.month, all: m.rate, ...(pts[m.month] || { opening: 0, sold: 0, rate: null }) }));
+  return tvHistory.months.map((m) => ({ month: m.month, ...(pts[m.month] || { opening: 0, sold: 0, rate: null, gross_avg: null }) }));
 }
-const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == null ? "—（月初在庫なし）" : pct(p.rate)}</b><br>販売 ${p.sold}台 ÷ 月初在庫 ${p.opening}台<br>全体 ${pct(p.all)}${p.gross_avg != null ? `<br>平均台粗利 ${man1(p.gross_avg)}` : ""}`;
-
-// マウスを乗せたとき：小さなグラフ
-const pop = $("tvPop");
-let popTimer = null, popKey = null;
-function hidePop() { clearTimeout(popTimer); popKey = null; pop.style.display = "none"; }
-$("tvModelRows").addEventListener("mousemove", (e) => {
-  const tr = e.target.closest("tr[data-key]");
-  if (!tr) return hidePop();
-  const place = () => {
-    const x = e.clientX + 18, yv = e.clientY - 80;
-    pop.style.left = Math.min(x, innerWidth - 380) + "px";
-    pop.style.top = Math.max(8, Math.min(yv, innerHeight - 230)) + "px";
-  };
-  if (popKey === tr.dataset.key) { if (pop.style.display === "block") place(); return; }
-  hidePop();
-  popKey = tr.dataset.key;
-  popTimer = setTimeout(() => {
-    const pts = modelPoints(popKey);
-    if (!pts.length) return;
-    pop.innerHTML = `<b>${h(tvHistory.models[popKey].name)}</b> <span class="tv-dim" style="font-size:11px">回転率の推移</span>` + rateChartSvg(pts, { w: 336, h: 170 });
-    place();
-    pop.style.display = "block";
-  }, 200);
-});
-$("tvModelRows").addEventListener("mouseleave", hidePop);
+const pointText = (p) => `${monthLabel(p.month)}<br>回転率 <b>${p.rate == null ? "—（月初在庫なし）" : pct(p.rate)}</b><br>販売 ${p.sold}台 ÷ 月初在庫 ${p.opening}台<br>平均台粗利 <b>${man1(p.gross_avg)}</b>`;
 
 // 押したとき：大きなグラフ
 function showChart(key) {
   const pts = modelPoints(key);
   if (!pts.length) return;
-  hidePop();
-  $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率の推移`;
+  $("tvChartTitle").textContent = `${tvHistory.models[key].name} の回転率と台粗利の推移`;
   const w = Math.min(820, $("tvChartBody").clientWidth || 820);
-  $("tvChartBody").innerHTML = rateChartSvg(pts, { w, h: 280, big: true }) +
-    `<div class="tv-note" style="margin-top:2px"><span style="display:inline-block;width:18px;border-top:2px solid ${BAR};vertical-align:middle"></span> ${h(tvHistory.models[key].name)}
-     <span style="display:inline-block;width:18px;border-top:2px dashed ${AVG};vertical-align:middle;margin-left:12px"></span> 全体</div>`;
-  $("tvChartTable").innerHTML = `<table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>全体</th></tr></thead><tbody>` +
-    pts.map((p) => `<tr><td>${monthLabel(p.month)}</td><td class="n">${p.opening}台</td><td class="n">${p.sold}台</td><td class="n">${pct(p.rate)}</td><td class="n">${pct(p.all)}</td></tr>`).join("") + "</tbody></table>";
-  const svg = $("tvChartBody").querySelector("svg"), tip = $("tvTip");
-  svg.addEventListener("mousemove", (e) => {
-    const hit = e.target.closest(".hit");
-    if (!hit) { tip.style.display = "none"; return; }
-    tip.innerHTML = pointText(pts[hit.dataset.i]);
-    tip.style.left = Math.min(e.clientX + 14, innerWidth - 220) + "px";
-    tip.style.top = e.clientY + 14 + "px";
-    tip.style.display = "block";
+  $("tvChartBody").innerHTML =
+    `<div class="tv-note" style="font-weight:700;color:${INK}">回転率</div>` +
+    lineChartSvg(pts, { w, h: 220, key: "rate", fmt: (v) => (v * 100).toFixed(1) + "%", axisFmt: (v) => Math.round(v * 100) + "%", color: BAR, floor: 0.1 }) +
+    `<div class="tv-note" style="font-weight:700;color:${INK};margin-top:6px">平均台粗利</div>` +
+    lineChartSvg(pts, { w, h: 200, key: "gross_avg", fmt: (v) => (v / 10000).toFixed(1) + "万", axisFmt: (v) => Number((v / 10000).toFixed(1)) + "万", color: GROSS, floor: 100000 });
+  $("tvChartTable").innerHTML = `<table class="tv-table" style="min-width:0;width:auto"><thead><tr><th>月</th><th>月初在庫</th><th>販売台数</th><th>回転率</th><th>平均台粗利</th></tr></thead><tbody>` +
+    pts.map((p) => `<tr><td>${monthLabel(p.month)}</td><td class="n">${p.opening}台</td><td class="n">${p.sold}台</td><td class="n">${pct(p.rate)}</td><td class="n">${man1(p.gross_avg)}</td></tr>`).join("") + "</tbody></table>";
+  const tip = $("tvTip");
+  $("tvChartBody").querySelectorAll("svg").forEach((svg) => {
+    svg.addEventListener("mousemove", (e) => {
+      const hit = e.target.closest(".hit");
+      if (!hit) { tip.style.display = "none"; return; }
+      tip.innerHTML = pointText(pts[hit.dataset.i]);
+      tip.style.left = Math.min(e.clientX + 14, innerWidth - 220) + "px";
+      tip.style.top = e.clientY + 14 + "px";
+      tip.style.display = "block";
+    });
+    svg.addEventListener("mouseleave", () => (tip.style.display = "none"));
   });
-  svg.addEventListener("mouseleave", () => (tip.style.display = "none"));
   $("tvChartCard").hidden = false;
   $("tvChartCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
   showCarSold(key);
