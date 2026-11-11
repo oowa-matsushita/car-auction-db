@@ -488,7 +488,7 @@ async function showCarSold(key) {
   const dash = '<span class="tv-dim">—</span>';
   $("tvCarSoldRows").innerHTML = j.rows.map((r) => `<tr>
     <td>${h(r.contract_date)}</td><td>${h(r.car_name)}</td><td>${r.year ? h(r.year) : dash}</td>
-    <td class="n">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString() + "km"}</td>
+    <td class="n">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString()}</td>
     <td>${r.color ? h(r.color) : dash}</td><td>${r.grade ? h(r.grade) : dash}</td>
     <td class="n">${r.price == null ? dash : yen(r.price)}</td>
     <td class="n">${r.cost == null ? dash : yen(r.cost)}</td>

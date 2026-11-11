@@ -545,7 +545,7 @@ function td(r, k, i) {
       const d = r.planned_price_man - r.bid_price_man * 1.1;
       return `<td class="money" style="color:${d < 0 ? "#c00" : "#080"}">${d > 0 ? "+" : ""}${d.toFixed(1)}</td>`;
     }
-    case "mileage_km": return `<td class="n">${v == null ? "" : Number(v).toLocaleString() + "km"}</td>`;
+    case "mileage_km": return `<td class="n">${v == null ? "" : Number(v).toLocaleString()}</td>`;
     case "year": return `<td title="${v ?? ""}">${v ? wareki(v) || v : ""}</td>`;
     case "score": return `<td class="sc">${h(v)}</td>`;
     case "extint": return `<td>${r.score_exterior || r.score_interior ? `${h(r.score_exterior)}/${h(r.score_interior)}` : ""}</td>`;
