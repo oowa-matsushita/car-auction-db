@@ -41,11 +41,11 @@
 
   .scroll { overflow: auto; flex: 1; min-height: 120px; background: #fff; }
   #tab-ledger { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  /* 回転率：上2/3＝一覧（ここだけスクロール）、下1/3＝グラフと売れた車（位置は固定） */
+  /* 回転率：上1/3＝グラフと売れた車（位置は固定）、下2/3＝一覧（ここだけスクロール） */
   #tab-turnover { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #tab-turnover > .top { flex: none; }
   #tab-turnover > .tv-wrap { flex: 1; min-height: 0; overflow: auto; }
-  #tvPanel { flex: none; height: 33.3vh; min-height: 240px; display: flex; flex-direction: column; background: #fff; border-top: 3px solid var(--navy); }
+  #tvPanel { flex: none; height: 33.3vh; min-height: 240px; display: flex; flex-direction: column; background: #fff; border-bottom: 3px solid var(--navy); }
   #tvPanel .bar2 { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 12px; background: var(--navy); color: #fff; font-size: 12px; }
   #tvPanel .bar2 b { font-size: 13px; }
   #tvPanel .body { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 6px 12px; }
@@ -259,6 +259,21 @@
     <button class="btn btn-sub" id="wxBtn" style="font-size:12px;padding:4px 12px" title="天気マークの基準（回転率・台粗利の点数）を変えます">⚙ 設定</button>
     <div id="tvLog" style="font-size:12px;color:#ffe9a8"></div>
   </div>
+  <div id="tvPanel">
+    <div class="bar2"><b id="tvChartTitle">回転率と台粗利の推移</b>
+      <label style="display:inline-flex;align-items:center;gap:4px"><select id="tvSpan" style="font-size:12px;padding:1px 4px"><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option><option value="12">12</option><option value="0">全部の</option></select>ヶ月分を表示</label>
+      <span style="flex:1"></span><span id="tvCarSoldTitle"></span></div>
+    <div class="body" id="tvPanelBody">
+      <div id="tvChartBody"><div class="hint" style="padding-top:60px;text-align:center">下の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div></div>
+      <div class="sold">
+        <div id="tvCarSoldNote" class="tv-note"></div>
+        <div class="scroll">
+          <table class="tv-table" style="min-width:0;width:100%"><thead><tr><th>契約日</th><th>車名</th><th>年式</th><th>距離</th><th>色</th><th>グレード</th><th>本体価格</th><th>本体原価</th><th>台粗利</th></tr></thead>
+          <tbody id="tvCarSoldRows"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="tv-wrap">
     <div class="tv-card">
       <h2>月ごとの回転率</h2>
@@ -286,21 +301,6 @@
       <h2 id="tvSoldTitle"></h2>
       <div style="overflow:auto;max-height:50vh">
         <table><thead id="tvSoldHead"></thead><tbody id="tvSoldRows"></tbody></table>
-      </div>
-    </div>
-  </div>
-  <div id="tvPanel">
-    <div class="bar2"><b id="tvChartTitle">回転率と台粗利の推移</b>
-      <label style="display:inline-flex;align-items:center;gap:4px"><select id="tvSpan" style="font-size:12px;padding:1px 4px"><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option><option value="12">12</option><option value="0">全部の</option></select>ヶ月分を表示</label>
-      <span style="flex:1"></span><span id="tvCarSoldTitle"></span></div>
-    <div class="body" id="tvPanelBody">
-      <div id="tvChartBody"><div class="hint" style="padding-top:60px;text-align:center">上の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div></div>
-      <div class="sold">
-        <div id="tvCarSoldNote" class="tv-note"></div>
-        <div class="scroll">
-          <table class="tv-table" style="min-width:0;width:100%"><thead><tr><th>契約日</th><th>車名</th><th>年式</th><th>距離</th><th>色</th><th>グレード</th><th>本体価格</th><th>本体原価</th><th>台粗利</th></tr></thead>
-          <tbody id="tvCarSoldRows"></tbody></table>
-        </div>
       </div>
     </div>
   </div>
