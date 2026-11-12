@@ -38,6 +38,57 @@ function anBars(items, { ht = 170, fmt = (v) => v.toFixed(1), color = "#10b8c4",
   return `<svg width="100%" viewBox="0 0 ${w} ${ht}" style="max-width:${w}px">${g}</svg>`;
 }
 
+
+// ---------- 経営アドバイス（ルールで判定。最終判断は人が行う） ----------
+// 使う数字：締まった月（今月の途中は除く）の 回転率（販売合計÷月初在庫合計）・平均台粗利・月平均の販売台数、最新の月初在庫
+function anAdvice(d, days) {
+  const ms = d.months, cur = ms[ms.length - 1];
+  const curPartial = days.length && days[days.length - 1].date < cur + "-28";
+  const done = curPartial ? ms.slice(0, -1) : ms;
+  if (!done.length) return null;
+  const latest = [...ms].reverse().find((mo) => d.models.some((m) => (m.open_by_month || {})[mo]));
+  const rows = d.models.map((m) => {
+    let so = 0, op = 0, gs = 0, gn = 0;
+    for (const mo of done) { so += m.by_month[mo] || 0; op += (m.open_by_month || {})[mo] || 0; const g = (m.gross_by_month || {})[mo]; if (g) { gs += g[0]; gn += g[1]; } }
+    const per = so / done.length, stock = (m.open_by_month || {})[latest] || 0;
+    return { name: m.name, sold: so, opening: op, rate: op ? so / op : null, gross: gn ? gs / gn : null, per, stock, cover: per ? stock / per : Infinity };
+  }).filter((r) => r.opening >= 3 * done.length || r.sold >= 2 * done.length); // 数字が少なすぎる車種は除く
+  const tot = rows.reduce((a, r) => ({ s: a.s + r.sold, o: a.o + r.opening, g: a.g + (r.gross ?? 0) * r.sold, n: a.n + (r.gross != null ? r.sold : 0) }), { s: 0, o: 0, g: 0, n: 0 });
+  const R = tot.o ? tot.s / tot.o : 0, G = tot.n ? tot.g / tot.n : 0;
+  const man = (v) => (v / 10000).toFixed(1) + "万円";
+  const ok = (r) => r.rate != null && r.gross != null;
+  // ① 在庫を増やす：回転が速く（平均の1.3倍以上）、粗利も平均並み以上、在庫が2.5か月分未満
+  const grow = rows.filter((r) => ok(r) && r.rate >= Math.max(R * 1.3, 0.3) && r.gross >= G * 0.9 && r.per >= 2 && r.cover < 2.5)
+    .map((r) => ({ ...r, add: Math.max(1, Math.round(r.per * 2 - r.stock)), score: (r.rate / R) * (r.gross / G) }))
+    .sort((a, b) => b.score - a.score).slice(0, 8);
+  // ② 値上げを試せる：よく売れるのに粗利が薄い
+  const up = rows.filter((r) => ok(r) && r.rate >= Math.max(R * 1.3, 0.3) && r.gross < G * 0.7 && r.per >= 2)
+    .sort((a, b) => b.rate - a.rate).slice(0, 6);
+  // ③ 価格を見直す：回転が遅く（平均の0.6倍以下）、在庫が5台以上
+  const slow = rows.filter((r) => r.rate != null && r.rate <= R * 0.6 && r.stock >= 5)
+    .map((r) => ({ ...r, waste: r.stock * (1 - r.rate) })).sort((a, b) => b.waste - a.waste).slice(0, 10);
+  const card = (r, kind) => {
+    const facts = `回転率 <b>${pct(r.rate)}</b>（全体 ${pct(R)}）・平均台粗利 <b>${r.gross == null ? "—" : man(r.gross)}</b>（全体 ${man(G)}）・月平均 ${r.per.toFixed(1)}台販売・最新の在庫 ${r.stock}台（${isFinite(r.cover) ? r.cover.toFixed(1) + "か月分" : "売れていない"}）`;
+    let adv = "";
+    if (kind === "grow") adv = `在庫が約${r.cover.toFixed(1)}か月分しかありません。<b>月に${Math.max(1, Math.round(r.per * 0.3))}〜${Math.max(2, Math.round(r.per * 0.5))}台多めに仕入れ</b>、在庫を2か月分（${Math.round(r.per * 2)}台前後）まで増やしても回る見込みです。売れ筋の色・グレードを優先して。`;
+    if (kind === "up") adv = `よく売れていますが粗利が全体より${man(G - r.gross)}薄いです。<b>売値を3〜5万円上げる</b>か、仕入れ値の上限を下げて様子を見ても回転は保てる可能性があります。`;
+    if (kind === "slow") {
+      const room = r.gross != null ? r.gross - G : null;
+      adv = r.gross != null && room > 0
+        ? `粗利は全体より${man(room)}厚いので、<b>${man(Math.min(room, 100000))}程度の値下げ</b>なら平均の粗利を保ったまま回転を上げられます。長く残っている車から順に。`
+        : `粗利も薄く、値下げの余地は小さいです。<b>仕入れを減らし</b>、長く残っている車は<b>業販・オークションへの出し直し</b>も検討を。`;
+      if (isFinite(r.cover) && r.cover >= 4) adv += `（今の売れ方だと在庫がはけるまで約${Math.round(r.cover)}か月）`;
+    }
+    return `<div class="adv-item"><div class="nm">${h(r.name)}</div><div class="fx">${facts}</div><div class="ad">${adv}</div></div>`;
+  };
+  return { R, G, done, latest, html: `
+    <div class="adv-cols">
+      <div class="adv-col grow"><h4>📦 売れているので在庫を増やしたい車種</h4>${grow.map((r) => card(r, "grow")).join("") || '<div class="tv-dim">当てはまる車種はありません</div>'}</div>
+      <div class="adv-col slow"><h4>💴 売れていないので価格を見直したい車種</h4>${slow.map((r) => card(r, "slow")).join("") || '<div class="tv-dim">当てはまる車種はありません</div>'}</div>
+    </div>
+    ${up.length ? `<div class="adv-col upc" style="margin-top:10px"><h4>📈 よく売れるのに粗利が薄い（値上げを試せる）車種</h4><div class="adv-cols">${up.map((r) => card(r, "up")).join("")}</div></div>` : ""}
+    <div class="tv-note" style="margin-top:8px">判断に使った期間：${monthLabel(done[0])}〜${monthLabel(done[done.length - 1])}（締まった月）。在庫は${monthLabel(latest)}の月初在庫。回転率と粗利から機械的に選んだ候補なので、季節・相場・個々の車の状態も見て決めてください。</div>` };
+}
 function drawAnalysis() {
   const d = an.data, days = d.days;
   if (!days.length) { $("anBody").innerHTML = '<div class="empty">販売データがありません</div>'; $("anInfo").textContent = ""; return; }
@@ -116,6 +167,7 @@ function drawAnalysis() {
   };
   const tRow = (m) => `<tr><td>${h(m.name)}</td><td class="n"><b>${m.now}</b>台</td><td class="n">${m.pAvg.toFixed(1)}台</td><td class="n" style="color:${m.diff >= 0 ? "#1f9d45" : "#c62828"};font-weight:700">${m.diff >= 0 ? "+" : ""}${m.diff.toFixed(1)}</td></tr>`;
 
+  const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
     <div class="an-kpis">
       <div class="an-kpi"><span>期間</span><b>${monthLabel(ms[0])}〜${monthLabel(cur)}</b><em>${days.length}日</em></div>
@@ -125,6 +177,7 @@ function drawAnalysis() {
       <div class="an-kpi"><span>売上高（税抜）</span><b>${Math.round(sales / 1e4).toLocaleString()}万円</b><em>車輛本体−値引き</em></div>
     </div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
+    ${adv ? `<div class="an-card adv"><h3>🧭 経営アドバイス <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
     <div class="an-grid">
       <div class="an-card"><h3>📅 曜日別（1日あたりの販売台数）</h3>${anBars(dowItems)}</div>
       <div class="an-card"><h3>☔ 雨の量と売れ行き <span class="tv-note">（普段＝同じ月・同じ曜日の種類の日と比べた増減）</span></h3>${hasWx ? anBars(rainItems, { fmt: (v) => pctS(v), color: "#3d7be5" }) : '<div class="tv-note">天気のデータがありません</div>'}</div>

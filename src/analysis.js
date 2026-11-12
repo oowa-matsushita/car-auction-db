@@ -82,16 +82,17 @@ export async function handleAnalysis(request, env, url) {
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(mo).all();
     const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items s WHERE month = ? ${channelSql(ch)}`).bind(mo).all();
     for (const g of groupModels(stock, sold, "ex", oem)) {
-      const a = agg.get(g.key) || { key: g.key, name: g.name, opening: 0, opening_months: 0, sold: 0, gsum: 0, gn: 0, by_month: {} };
+      const a = agg.get(g.key) || { key: g.key, name: g.name, opening: 0, opening_months: 0, sold: 0, gsum: 0, gn: 0, by_month: {}, open_by_month: {}, gross_by_month: {} };
       a.name = g.name; a.opening += g.opening; if (g.opening) a.opening_months++;
-      a.sold += g.sold; a.by_month[mo] = g.sold;
+      a.sold += g.sold; a.by_month[mo] = g.sold; a.open_by_month[mo] = g.opening;
+      if (g.gross_n) a.gross_by_month[mo] = [g.gross_total, g.gross_n];
       if (g.gross_n) { a.gsum += g.gross_total; a.gn += g.gross_n; }
       agg.set(g.key, a);
     }
   }
   const models = [...agg.values()].filter((a) => a.sold || a.opening).map((a) => ({
     key: a.key, name: a.name, sold: a.sold, opening: a.opening, rate: a.opening ? a.sold / a.opening : null,
-    gross_avg: a.gn ? Math.round(a.gsum / a.gn) : null, gross_total: a.gn ? a.gsum : null, by_month: a.by_month,
+    gross_avg: a.gn ? Math.round(a.gsum / a.gn) : null, gross_total: a.gn ? a.gsum : null, by_month: a.by_month, open_by_month: a.open_by_month, gross_by_month: a.gross_by_month,
   }));
 
   // 価格帯（値引き後の本体価格・税込）
