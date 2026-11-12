@@ -198,6 +198,7 @@ function drawAnalysis() {
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
+    <div class="an-card cs" id="anCs"><h3>🌐 カーセンサーの反響</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card kh" id="anKh"><h3>📝 施策メモ（社長のノウハウ）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-grid">
       <div class="an-card"><h3>📅 曜日別（1日あたりの販売台数）</h3>${anBars(dowItems)}</div>
@@ -217,6 +218,7 @@ function drawAnalysis() {
       <table class="tv-table an-table"><thead><tr><th>日付</th><th>曜日</th><th>販売</th><th>天気（${h(d.place || "")}）</th><th>普段との差</th></tr></thead><tbody>${topDays.map((x) => `<tr><td>${x.date}</td><td>${AN_DOW[x.dow]}${x.off && x.dow >= 1 && x.dow <= 5 ? "（祝）" : ""}</td><td class="n"><b>${x.sold}</b>台</td><td>${wxTxt(x)}</td><td class="n">${pctS(x.idx - 1)}</td></tr>`).join("")}</tbody></table></div>`;
   loadTarget();
   drawKnowhow();
+  if (an.cs === undefined) { an.cs = null; loadCs(); } else drawCs();
   $("anInfo").textContent = hasWx ? `天気：${d.place || ""}（気象庁）` : "天気データなし";
 }
 ["anCh", "anSpan", "anOem"].forEach((id) => $(id).addEventListener("change", loadAnalysis));
@@ -327,5 +329,80 @@ function drawKnowhow() {
   box.querySelectorAll("[data-khdel]").forEach((b) => (b.onclick = async () => {
     if (!confirm("この施策メモを消しますか？")) return;
     await fetch("/api/knowhow/" + b.dataset.khdel, { method: "DELETE" }); loadKnowhow();
+  }));
+}
+
+// ---------- カーセンサーの反響（物件別・日ごと）：閲覧・問い合わせと販売の関係、車種ごとの判定、値下げ候補 ----------
+async function loadCs() {
+  try { const r = await fetch("/api/carsensor"); an.cs = await r.json(); } catch { an.cs = { month: null }; }
+  drawCs();
+}
+function corr(a, b) {
+  const n = a.length; if (n < 3) return null;
+  const ma = a.reduce((s, x) => s + x, 0) / n, mb = b.reduce((s, x) => s + x, 0) / n;
+  let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < n; i++) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) ** 2; sbb += (b[i] - mb) ** 2; }
+  return saa && sbb ? sab / Math.sqrt(saa * sbb) : null;
+}
+function drawCs() {
+  const box = $("anCs"), c = an.cs;
+  if (!box) return;
+  if (!c || !c.month) { box.innerHTML = '<h3>🌐 カーセンサーの反響</h3><div class="tv-dim">まだデータがありません。カーセンサーの「反響（物件別_数値分析）」CSVを送っていただければ取り込みます。</div>'; return; }
+  const nd = Number(c.through.slice(8)), sum = (a) => (a || []).reduce((s, x) => s + (x || 0), 0);
+  const cars = c.cars, days = Array.from({ length: nd }, (_, i) => `${c.month}-${String(i + 1).padStart(2, "0")}`);
+  const dv = days.map((_, i) => cars.reduce((s, x) => s + (x.v[i] || 0), 0)), dq = days.map((_, i) => cars.reduce((s, x) => s + (x.q[i] || 0), 0));
+  const dr = days.map((d) => c.daily[d]?.retail || 0), da = days.map((d) => c.daily[d]?.all || 0);
+  const V = sum(dv), Q = sum(dq), F = cars.reduce((s, x) => s + sum(x.f), 0), W = cars.reduce((s, x) => s + sum(x.w), 0);
+  const rV = corr(dv, dr), rQ = corr(dq, dr);
+  const rTxt = (r) => (r == null ? "—" : `${r.toFixed(2)}（${Math.abs(r) >= 0.7 ? "強い" : Math.abs(r) >= 0.4 ? "中くらい" : "弱い"}${r < 0 ? "・逆" : ""}）`);
+  // 日ごとの表（閲覧・問い合わせ・小売の販売）
+  const mx = Math.max(...dv, 1);
+  const dayRows = days.map((d, i) => { const dw = new Date(d + "T00:00:00Z").getUTCDay(); return `<tr><td>${Number(d.slice(8))}日(${AN_DOW[dw]})</td><td class="n">${dv[i].toLocaleString()}</td><td><span class="cs-bar" style="width:${(dv[i] / mx) * 120}px"></span></td><td class="n">${dq[i]}</td><td class="n">${dr[i]}</td></tr>`; }).join("");
+  // 車種ごと
+  const g = {};
+  for (const x of cars) { const k = x.key; const a = (g[k] ||= { key: k, name: x.name, n: 0, v: 0, q: 0, f: 0, w: 0, posted: 0 }); a.n++; a.v += sum(x.v); a.q += sum(x.q); a.f += sum(x.f); a.w += sum(x.w); a.posted += x.posted; }
+  const totSold = Object.values(c.sold_by_model).reduce((s, x) => s + x, 0);
+  const avgVpc = V / cars.length / nd, avgSoldRate = totSold / cars.length;
+  const models = Object.values(g).filter((a) => a.n >= 3).map((a) => {
+    const vpc = a.v / a.n / nd, sold = c.sold_by_model[a.key] || 0, sr = sold / a.n;
+    let judge = "", cls = "";
+    if (vpc >= avgVpc * 1.3 && sr < avgSoldRate * 0.7) { judge = "見られているのに売れない → 価格・条件の見直し"; cls = "dn"; }
+    else if (vpc >= avgVpc * 1.3) { judge = "人気 → 在庫を切らさない"; cls = "up"; }
+    else if (vpc <= avgVpc * 0.6) { judge = "見られていない → 写真・掲載文・価格を見直す"; cls = "wa"; }
+    return { ...a, vpc, sold, sr, judge, cls };
+  }).sort((x, y) => (y.judge ? 1 : 0) - (x.judge ? 1 : 0) || y.v - x.v);
+  const mRows = models.slice(0, 40).map((m) => `<tr><td class="nm">${h(m.name)}</td><td class="n">${m.n}台</td><td class="n">${m.v.toLocaleString()}</td><td class="n${m.vpc >= avgVpc * 1.3 ? " hi" : m.vpc <= avgVpc * 0.6 ? " lo" : ""}">${m.vpc.toFixed(1)}</td>
+    <td class="n">${m.q}</td><td class="n">${m.f}</td><td class="n">${m.w}</td><td class="n">${m.sold}台</td><td class="n">${Math.round(m.posted / m.n)}日</td><td class="jd ${m.cls}">${m.judge}</td></tr>`).join("");
+  // 値下げ候補：長く掲載していて、今月の閲覧が少なく、問い合わせが無い車
+  const stale = cars.filter((x) => x.posted >= 60 && sum(x.q) === 0 && sum(x.v) / nd <= Math.max(0.5, avgVpc * 0.4)).sort((a, b) => b.posted - a.posted).slice(0, 15);
+  // 価格の変更（本体価格が月の途中で変わった車）と、その前後の1日あたりの閲覧
+  const chg = [];
+  for (const x of cars) for (let i = 1; i < x.p.length; i++) if (x.p[i] != null && x.p[i - 1] != null && x.p[i] !== x.p[i - 1]) {
+    const bv = x.v.slice(0, i), av = x.v.slice(i), avg = (a) => (a.length ? sum(a) / a.length : null);
+    chg.push({ x, date: days[i], from: x.p[i - 1], to: x.p[i], bv: avg(bv), av: avg(av), bq: sum(x.q.slice(0, i)), aq: sum(x.q.slice(i)) });
+  }
+  const yen = (v) => (v == null ? "—" : (v / 10000).toFixed(1) + "万");
+  box.innerHTML = `<h3>🌐 カーセンサーの反響 <span class="tv-note">（${monthLabel(c.month)}・${Number(c.through.slice(5, 7))}/${nd}まで）</span></h3>
+    <div class="tg-kpis">
+      <div><span>掲載台数</span><b>${cars.length.toLocaleString()}台</b><em>1台の平均掲載 ${Math.round(cars.reduce((s, x) => s + x.posted, 0) / cars.length)}日</em></div>
+      <div><span>詳細閲覧</span><b>${V.toLocaleString()}</b><em>1台1日 ${avgVpc.toFixed(1)}回</em></div>
+      <div><span>問い合わせ</span><b>${Q.toLocaleString()}件</b><em>閲覧の ${(Q / V * 100).toFixed(2)}%</em></div>
+      <div><span>お気に入り／価格見直し登録</span><b>${F}／${W}</b><em>価格見直し登録＝値下げを待っている人</em></div>
+      <div><span>小売の販売との相関</span><b style="font-size:15px">閲覧 ${rTxt(rV)}</b><em>問い合わせ ${rTxt(rQ)}（日ごと・${nd}日分）</em></div>
+    </div>
+    <div class="an-grid" style="margin-bottom:0">
+      <div><div class="an-sub">日ごとの閲覧・問い合わせ・小売の販売</div><div style="max-height:360px;overflow:auto"><table class="tv-table cs-table"><thead><tr><th>日</th><th>詳細閲覧</th><th></th><th>問合せ</th><th>小売販売</th></tr></thead><tbody>${dayRows}</tbody></table></div></div>
+      <div><div class="an-sub">💴 値下げ候補（60日以上掲載・今月の問い合わせ0件・閲覧が少ない）</div><div style="max-height:360px;overflow:auto"><table class="tv-table cs-table"><thead><tr><th>車種</th><th>グレード</th><th>年式</th><th>本体価格</th><th>掲載日数</th><th>閲覧/日</th><th>価格見直し登録</th></tr></thead><tbody>
+        ${stale.map((x) => `<tr><td class="nm">${h(x.model)}</td><td class="gr" title="${h(x.grade)}">${h(x.grade)}</td><td>${h(x.year)}</td><td class="n">${yen(x.price)}</td><td class="n lo">${x.posted}日</td><td class="n">${(sum(x.v) / nd).toFixed(1)}</td><td class="n">${sum(x.w)}</td></tr>`).join("") || '<tr><td colspan="7" class="tv-dim">なし</td></tr>'}</tbody></table></div></div>
+    </div>
+    <div class="an-sub" style="margin-top:10px">🚗 車種ごとの反響（3台以上掲載。1台1日の閲覧が平均の1.3倍以上は緑、0.6倍以下は赤）</div>
+    <div style="max-height:420px;overflow:auto"><table class="tv-table cs-table"><thead><tr><th>車種</th><th>掲載</th><th>詳細閲覧</th><th>1台1日</th><th>問合せ</th><th>お気に入り</th><th>価格見直し</th><th>今月販売</th><th>平均掲載日数</th><th>判定</th></tr></thead><tbody>${mRows}</tbody></table></div>
+    ${chg.length ? `<div class="an-sub" style="margin-top:10px">🏷️ 今月、本体価格を変えた車（変える前と後の1日あたりの閲覧）</div><table class="tv-table cs-table"><thead><tr><th>車種</th><th>グレード</th><th>変えた日</th><th>本体価格</th><th>閲覧/日（前→後）</th><th>問合せ（前→後）</th><th></th></tr></thead><tbody>
+      ${chg.map((r, i) => `<tr><td class="nm">${h(r.x.model)}</td><td class="gr">${h(r.x.grade)}</td><td>${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8))}</td><td class="n">${yen(r.from)} → <b class="${r.to < r.from ? "dn" : "up"}">${yen(r.to)}</b></td><td class="n">${r.bv == null ? "—" : r.bv.toFixed(1)} → ${r.av == null ? "—" : r.av.toFixed(1)}</td><td class="n">${r.bq} → ${r.aq}</td>
+        <td><button class="btn btn-sub" data-cskh="${i}" style="padding:1px 6px;font-size:11px" title="施策メモに記録して、販売の効果も追いかける">施策メモへ</button></td></tr>`).join("")}</tbody></table>` : ""}
+    <div class="tv-note" style="margin-top:4px">データ：カーセンサー「反響（物件別_数値分析）」。出力した日は途中なので、その前の日までを使っています。今月販売は販売データ（小売＋業販）の車種ごとの台数です。</div>`;
+  box.querySelectorAll("[data-cskh]").forEach((b) => (b.onclick = async () => {
+    const r = chg[b.dataset.cskh];
+    await fetch("/api/knowhow", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: r.x.model, kind: r.to < r.from ? "値下げ" : "値上げ", start: r.date, detail: `カーセンサーで本体価格 ${yen(r.from)}→${yen(r.to)}（${r.x.grade}）` }) });
+    b.textContent = "記録しました"; b.disabled = true; loadKnowhow();
   }));
 }

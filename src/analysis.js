@@ -3,6 +3,9 @@ import { channelSql, grossOf, netPrice, loadExpense, groupModels, isOffDay, days
 
 // ---- 分析（ベータ）：売れている車・売れている日・天気との関係 ---------------------------------
 export const ANALYSIS_SCHEMA = [
+  // カーセンサーの反響（物件別・日ごと）。1台1行で、日ごとの数字は JSON で持つ
+  "CREATE TABLE IF NOT EXISTS cs_cars ( month TEXT NOT NULL, car_key TEXT NOT NULL, maker TEXT, model TEXT, grade TEXT, price INTEGER, year TEXT, mileage TEXT, color TEXT, chassis_tail TEXT, posted_days INTEGER, data TEXT, PRIMARY KEY (month, car_key) )",
+  "CREATE TABLE IF NOT EXISTS cs_months ( month TEXT PRIMARY KEY, through TEXT, cars INTEGER, uploaded_at TEXT DEFAULT (datetime('now','localtime')) )",
   // 施策メモ（社長のノウハウ）：いつ・どの車種に・何をしたか。効果は販売データから自動で計算する
   "CREATE TABLE IF NOT EXISTS knowhow ( id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT NOT NULL, kind TEXT, start_date TEXT NOT NULL, end_date TEXT, detail TEXT, created_at TEXT DEFAULT (datetime('now','localtime')) )",
   "CREATE TABLE IF NOT EXISTS weather_daily ( date TEXT PRIMARY KEY, place TEXT, temp REAL, rain REAL, wind REAL, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
@@ -37,6 +40,52 @@ export async function handleAnalysis(request, env, url) {
       .bind(r.date, r.place, r.temp, r.rain, r.wind));
     for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
     return json({ ok: true, count: rows.length, place: rows[0].place, from: rows[0].date, to: rows[rows.length - 1].date });
+  }
+
+  // カーセンサーの「反響（物件別_数値分析）」CSV を取り込む（同じ月は入れ替え）
+  if (path === "/api/carsensor" && method === "POST") {
+    const lines = (await request.text()).replace(/^\uFEFF/, "").split(/\r?\n/);
+    const pm = lines.join("\n").match(/期間指定：,(\d{4})年(\d{1,2})月/);
+    const om = lines.join("\n").match(/出力日時：,(\d{4})\/(\d{2})\/(\d{2})/);
+    const hi = lines.findIndex((l) => l.startsWith("メーカー,車種"));
+    if (!pm || hi < 0) return json({ error: "カーセンサーの反響（物件別）のCSVではないようです" }, 400);
+    const month = `${pm[1]}-${pm[2].padStart(2, "0")}`;
+    const csvRow = (l) => { const out = []; let cur = "", q = false; for (const ch of l) { if (ch === '"') q = !q; else if (ch === "," && !q) { out.push(cur); cur = ""; } else cur += ch; } out.push(cur); return out; };
+    const head = csvRow(lines[hi]), ix = Object.fromEntries(head.map((k, i) => [k, i])), d0 = ix["01日"];
+    const want = { "詳細閲覧数": "v", "問合せ数（全て）": "q", "電話問合せ数": "t", "メール問合せ数（全て）": "m", "お気に入り登録": "f", "価格見直し登録": "w", "本体価格": "p" };
+    const cars = new Map();
+    for (const l of lines.slice(hi + 1)) {
+      if (!l.trim()) continue;
+      const r = csvRow(l), key = r.slice(0, ix["掲載店舗"]).join("|"), mk = want[r[ix["指標選択"]]];
+      if (!mk) continue;
+      const c = cars.get(key) || { key, maker: r[ix["メーカー"]], model: r[ix["車種"]], grade: [r[ix["グレード"]], r[ix["グレード補記"]]].filter(Boolean).join(" "), price: Number(r[ix["本体価格検索用"]]) || null,
+        year: r[ix["年式"]], mileage: r[ix["走行距離表示用"]], color: r[ix["色"]], tail: r[ix["車台末番"]], posted: Number(r[ix["掲載延べ日数"]]) || 0, d: {} };
+      c.d[mk] = r.slice(d0, d0 + 31).map((x) => (x === "" || x === "-" ? null : Number(x)));
+      cars.set(key, c);
+    }
+    // 出力した日の前の日までを「済んだ日」とする（出力した日は途中なので使わない）
+    let through = `${month}-31`;
+    if (om && `${om[1]}-${om[2]}` === month) through = `${month}-${String(Number(om[3]) - 1).padStart(2, "0")}`;
+    const st = [db.prepare("DELETE FROM cs_cars WHERE month = ?").bind(month),
+      db.prepare("INSERT INTO cs_months (month, through, cars) VALUES (?,?,?) ON CONFLICT(month) DO UPDATE SET through=excluded.through, cars=excluded.cars, uploaded_at=datetime('now','localtime')").bind(month, through, cars.size)];
+    for (const c of cars.values()) st.push(db.prepare("INSERT INTO cs_cars (month, car_key, maker, model, grade, price, year, mileage, color, chassis_tail, posted_days, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(month, c.key, c.maker, c.model, c.grade, c.price, c.year, c.mileage, c.color, c.tail, c.posted, JSON.stringify(c.d)));
+    for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
+    return json({ ok: true, month, through, cars: cars.size });
+  }
+  if (path === "/api/carsensor" && method === "GET") {
+    const m = await db.prepare(url.searchParams.get("month") ? "SELECT * FROM cs_months WHERE month = ?" : "SELECT * FROM cs_months ORDER BY month DESC LIMIT 1").bind(...(url.searchParams.get("month") ? [url.searchParams.get("month")] : [])).first();
+    if (!m) return json({ month: null });
+    const nd = Number(m.through.slice(8));
+    const { results } = await db.prepare("SELECT * FROM cs_cars WHERE month = ?").bind(m.month).all();
+    const cars = results.map((r) => { const d = JSON.parse(r.data), cut = (a) => (a || []).slice(0, nd);
+      return { model: r.model, key: modelKey(r.model), name: modelName(r.model), grade: r.grade, price: r.price, year: r.year, mileage: r.mileage, color: r.color, tail: r.chassis_tail, posted: r.posted_days,
+        v: cut(d.v), q: cut(d.q), t: cut(d.t), m: cut(d.m), f: cut(d.f), w: cut(d.w), p: cut(d.p) }; });
+    // 同じ月の販売（日ごと・車種ごと。数えない販売は除く）
+    const { results: sales } = await db.prepare("SELECT contract_date AS d, car_name, channel FROM sales_items WHERE month = ? AND COALESCE(channel,'') <> 'exclude'").bind(m.month).all();
+    const daily = {}, byModel = {};
+    for (const s of sales) { if (!s.d || s.d > m.through) continue; const x = (daily[s.d] ||= { all: 0, retail: 0 }); x.all++; if (s.channel === "retail") x.retail++; const k = modelKey(s.car_name); byModel[k] = (byModel[k] || 0) + 1; }
+    return json({ month: m.month, through: m.through, uploaded_at: m.uploaded_at, cars, daily, sold_by_model: byModel });
   }
 
   // 施策メモ：一覧（効果つき）・追加・削除
