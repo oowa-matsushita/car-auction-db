@@ -246,7 +246,7 @@ function drawTarget() {
     cum += goal;
     return `<tr class="${!done.length ? "fu" : ""}"><td><b>${i + 1}週目</b></td><td style="text-align:left">${fmtD(w.days[0].date)}${w.days.length > 1 ? "〜" + fmtD(w.days[w.days.length - 1].date) : ""}</td>
       <td class="n">${w.days.length - off}日</td><td class="n">${off}日</td><td class="n"><b>${Math.round(goal)}台</b></td><td class="n">${Math.round(cum)}台</td>
-      <td class="n">${done.length ? act + "台" : "—"}</td><td class="n ${done.length ? (act - goal * dW / W >= 0 ? "plus" : "minus") : ""}">${done.length ? (act - Math.round(goal * dW / W) >= 0 ? "+" : "") + (act - Math.round(goal * dW / W)) + "台" : "—"}</td><td>${state}</td></tr>`;
+      <td class="n">${done.length ? act + "台" : "—"}</td><td class="n">${done.length && done.length < w.days.length && dW ? `<span class="tg-fc" title="済んだ日のペースで週末までいった場合（土日祝の重みつき）">${Math.round(act / dW * W)}台</span>` : ""}</td><td class="n ${done.length ? (act - goal * dW / W >= 0 ? "plus" : "minus") : ""}">${done.length ? (act - Math.round(goal * dW / W) >= 0 ? "+" : "") + (act - Math.round(goal * dW / W)) + "台" : "—"}</td><td>${state}</td></tr>`;
   }).join("");
   const restOff = restDays.filter((x) => x.off).length, restWk = restDays.length - restOff;
   box.innerHTML = `<h3>🎯 今月の小売目標</h3>${input}
@@ -257,7 +257,7 @@ function drawTarget() {
       <div><span>このままの着地見込み</span><b>${land}台</b><em>目標まで ${land - T >= 0 ? "+" : ""}${land - T}台</em></div>
       <div><span>残りで必要</span><b>${need}台</b><em>平日 ${perW.toFixed(1)}台/日・土日祝 ${(perW * t.ratio).toFixed(1)}台/日（残り 平日${restWk}日・土日祝${restOff}日）</em></div>
     </div>
-    <table class="tv-table tg-table"><thead><tr><th>週</th><th style="text-align:left">期間</th><th>平日</th><th>土日祝</th><th>週の目標</th><th>累計目標</th><th>実績</th><th>目標との差</th><th>状態</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="tv-table tg-table"><thead><tr><th>週</th><th style="text-align:left">期間</th><th>平日</th><th>土日祝</th><th>週の目標</th><th>累計目標</th><th>実績</th><th>着地予想</th><th>目標との差</th><th>状態</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="tv-note" style="margin-top:4px">週の目標＝月の目標を日数で割り振ったもの（平日1日＝1、土日祝1日＝${t.ratio}として計算。過去の小売の実績から）。実績は小売のみ・契約日で数えます。途中の週は、済んだ日の分の目標と比べています。</div>`;
   bindTg();
 }
