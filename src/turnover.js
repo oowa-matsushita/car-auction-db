@@ -248,7 +248,9 @@ export async function handleTurnover(request, env, url) {
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'retail') AS sold_retail,
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'wholesale') AS sold_wholesale,
         (SELECT SUM(${grossSql(tax)}) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_total,
-        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_n
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_n,
+        -- 売上高（税抜）＝ 車輛本体価格 − 値引き を税抜にした合計（数える販売だけ）
+        (SELECT SUM(ROUND(${NET_SQL} / 1.1)) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)}) AS sales_total
       FROM ms LEFT JOIN inv_months m ON m.month = ms.month
       ORDER BY ms.month DESC`).all();
     for (const m of months) {

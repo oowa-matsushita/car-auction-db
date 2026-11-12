@@ -79,7 +79,7 @@ async function loadTurnover() {
           + (m.sold_retail || m.sold_wholesale ? `<div class="tv-dim" style="font-size:11px">小売 ${m.sold_retail} / 業販 ${m.sold_wholesale}</div>` : "")}</td>
       <td class="n tv-rate">${pct(m.rate)}</td>
       <td class="n">${tvForecast && tvForecast.month === m.month ? fcHtml(m.rate, tvForecast) + `<div class="tv-dim" style="font-size:11px;font-weight:400">販売 ${tvForecast.sold.toLocaleString()}台の見込み</div>` : ""}</td>
-      <td class="n"><b>${man1(m.gross_avg)}</b>${m.gross_total != null ? `<div class="tv-dim" style="font-size:11px">合計 ${Math.round(m.gross_total / 10000).toLocaleString()}万円</div>` : ""}</td>
+      <td class="n"><b>${man1(m.gross_avg)}</b>${m.sales_total ? `<div class="tv-dim" style="font-size:11px" title="売上高（税抜）＝ 車輛本体価格 − 値引き を税抜にした合計。台粗利の合計は ${m.gross_total != null ? Math.round(m.gross_total / 10000).toLocaleString() + "万円" : "—"}">売上 ${Math.round(m.sales_total / 10000).toLocaleString()}万円</div>` : ""}</td>
       <td>${rateBar(m)}</td>
     </tr>`).join("");
   // 最初は、月初在庫と販売データがそろっている一番新しい月を表示
