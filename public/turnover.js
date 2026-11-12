@@ -207,6 +207,7 @@ function openWx() {
         <div class="wx-row" style="display:flex;gap:18px;flex-wrap:wrap">
           <label style="cursor:pointer"><input type="radio" name="wxHover" value="latest" ${(c.hover || "latest") === "latest" ? "checked" : ""}> 最新月（今月は途中の数字と着地予想）</label>
           <label style="cursor:pointer"><input type="radio" name="wxHover" value="avg3" ${c.hover === "avg3" ? "checked" : ""}> 直近3か月の平均（今月を除く）</label>
+          <label style="cursor:pointer"><input type="radio" name="wxHover" value="off" ${c.hover === "off" ? "checked" : ""}> 表示しない</label>
         </div>
         <div class="tv-note">回転率・台粗利・天気マークをどちらで出すかを選びます。グラフはどちらでも同じです。</div>
       </section>
@@ -603,6 +604,7 @@ function placePop(pop, x, y) {
 }
 $("rows").addEventListener("mousemove", (e) => {
   const tr = e.target.closest("tr[data-i]"), pop = $("tvPop");
+  if (wxCfg.hover === "off") { pop.style.display = "none"; return; } // 設定で「表示しない」
   if (!tr) { pop.style.display = "none"; return; }
   const car = state.rows[tr.dataset.i]?.car_name;
   if (pop.style.display === "block" && ledgerHoverKey === tr.dataset.i) { placePop(pop, e.clientX, e.clientY); return; }
