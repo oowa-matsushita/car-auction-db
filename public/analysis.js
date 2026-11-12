@@ -68,29 +68,33 @@ function anAdvice(d, days) {
   // ③ 価格を見直す：回転が遅く（平均の0.6倍以下）、在庫が5台以上
   const slow = rows.filter((r) => r.rate != null && r.rate <= R * 0.6 && r.stock >= 5)
     .map((r) => ({ ...r, waste: r.stock * (1 - r.rate) })).sort((a, b) => b.waste - a.waste).slice(0, 10);
-  const card = (r, kind) => {
-    const facts = `回転率 <b>${pct(r.rate)}</b>（全体 ${pct(R)}）・平均台粗利 <b>${r.gross == null ? "—" : man(r.gross)}</b>（全体 ${man(G)}）・月平均 ${r.per.toFixed(1)}台販売・最新の在庫 ${r.stock}台（${isFinite(r.cover) ? r.cover.toFixed(1) + "か月分" : "売れていない"}）`;
-    let adv = "";
-    if (kind === "grow") adv = `在庫が約${r.cover.toFixed(1)}か月分しかありません。在庫を2.5か月分の<b>${r.target}台前後まで（あと${r.add}台）</b>増やしても回る見込みです。月に${Math.max(1, Math.round(r.per * 0.3))}〜${Math.max(2, Math.round(r.per * 0.5))}台ずつ多めに仕入れ、売れ筋の色・グレードを優先して。`;
-    if (kind === "up") adv = `よく売れていますが粗利が全体より${man(G - r.gross)}薄いです。<b>売値を3〜5万円上げる</b>か、仕入れ値の上限を下げて様子を見ても回転は保てる可能性があります。`;
+  // 表の1行。目標の在庫＝月平均の販売の2.5か月分。増減＝目標−今の在庫
+  const row = (r, kind) => {
+    const target = Math.round(r.per * 2.5), diff = target - r.stock;
+    let price = "—", act = "";
+    if (kind === "grow") act = "仕入れを増やす";
+    if (kind === "up") { price = '<span class="up">+3〜5万円</span>'; act = "値上げを試す"; }
     if (kind === "slow") {
       const room = r.gross != null ? r.gross - G : null;
-      adv = r.gross != null && room >= 30000
-        ? `粗利は全体より${man(room)}厚いので、<b>${man(Math.min(Math.floor(room / 10000) * 10000, 100000))}程度の値下げ</b>なら平均の粗利を保ったまま回転を上げられます。長く残っている車から順に。`
-        : r.gross != null && room > -30000
-          ? `粗利は全体並みで、大きな値下げの余地はありません。<b>3万円前後の小幅な値下げ</b>で長く残っている車を動かしつつ、<b>仕入れを減らして</b>在庫を絞るのが先です。`
-          : `粗利も薄く、値下げの余地は小さいです。<b>仕入れを減らし</b>、長く残っている車は<b>業販・オークションへの出し直し</b>も検討を。`;
-      if (isFinite(r.cover) && r.cover >= 4) adv += `（今の売れ方だと在庫がはけるまで約${Math.round(r.cover)}か月）`;
+      if (room != null && room >= 30000) { price = `<span class="dn">−${(Math.min(Math.floor(room / 10000) * 10000, 100000) / 10000).toFixed(0)}万円</span>`; act = "値下げ"; }
+      else if (room != null && room > -30000) { price = '<span class="dn">−3万円前後</span>'; act = "小幅値下げ＋仕入れ減"; }
+      else { act = r.gross != null && r.gross < 0 ? "仕入れ停止・業販へ" : "仕入れ減・業販へ"; }
     }
-    return `<div class="adv-item"><div class="nm">${h(r.name)}</div><div class="fx">${facts}</div><div class="ad">${adv}</div></div>`;
+    const cover = isFinite(r.cover) ? r.cover.toFixed(1) : "—";
+    return `<tr><td class="nm">${h(r.name)}</td>
+      <td class="n">${pct(r.rate)}</td><td class="n${r.gross != null && r.gross < 0 ? " neg" : ""}">${r.gross == null ? "—" : man(r.gross)}</td>
+      <td class="n">${r.per.toFixed(1)}台</td><td class="n">${r.stock}台</td>
+      <td class="n${isFinite(r.cover) && r.cover >= 4 ? " warn" : ""}">${cover}${isFinite(r.cover) ? "か月" : ""}</td>
+      <td class="n">${target}台</td><td class="n ${diff > 0 ? "plus" : diff < 0 ? "minus" : ""}">${diff > 0 ? "+" : ""}${diff}台</td>
+      <td class="n">${price}</td><td class="act">${act}</td></tr>`;
   };
+  const table = (list, kind) => list.length ? `<table class="tv-table adv-table"><thead><tr><th>車種</th><th>回転率</th><th>平均台粗利</th><th>月平均販売</th><th>今の在庫</th><th>在庫の月数</th><th>目標在庫</th><th>あと何台</th><th>おすすめ価格</th><th>やること</th></tr></thead>
+    <tbody>${list.map((r) => row(r, kind)).join("")}</tbody></table>` : '<div class="tv-dim">当てはまる車種はありません</div>';
   return { R, G, done, latest, html: `
-    <div class="adv-cols">
-      <div class="adv-col grow"><h4>📦 売れているので在庫を増やしたい車種</h4>${grow.map((r) => card(r, "grow")).join("") || '<div class="tv-dim">当てはまる車種はありません</div>'}</div>
-      <div class="adv-col slow"><h4>💴 売れていないので価格を見直したい車種</h4>${slow.map((r) => card(r, "slow")).join("") || '<div class="tv-dim">当てはまる車種はありません</div>'}</div>
-    </div>
-    ${up.length ? `<div class="adv-col upc" style="margin-top:10px"><h4>📈 よく売れるのに粗利が薄い（値上げを試せる）車種</h4><div class="adv-cols">${up.map((r) => card(r, "up")).join("")}</div></div>` : ""}
-    <div class="tv-note" style="margin-top:8px">判断に使った期間：${monthLabel(done[0])}〜${monthLabel(done[done.length - 1])}（締まった月）。在庫は${monthLabel(latest)}の月初在庫。回転率と粗利から機械的に選んだ候補なので、季節・相場・個々の車の状態も見て決めてください。</div>` };
+    <div class="adv-col grow"><h4>📦 売れているので在庫を増やしたい車種</h4>${table(grow, "grow")}</div>
+    <div class="adv-col slow" style="margin-top:10px"><h4>💴 売れていないので価格を見直したい車種</h4>${table(slow, "slow")}</div>
+    ${up.length ? `<div class="adv-col upc" style="margin-top:10px"><h4>📈 よく売れるのに粗利が薄い（値上げを試せる）車種</h4>${table(up, "up")}</div>` : ""}
+    <div class="tv-note" style="margin-top:8px">全体の回転率 ${pct(R)}・平均台粗利 ${man(G)}。目標在庫＝月平均販売の2.5か月分、あと何台＝目標在庫−今の在庫。おすすめ値下げは「全体の平均台粗利を下回らない範囲（最大10万円）」。期間：${monthLabel(done[0])}〜${monthLabel(done[done.length - 1])}（締まった月）、在庫は${monthLabel(latest)}の月初在庫。機械的な候補なので、季節・相場・車の状態も見て決めてください。</div>` };
 }
 function drawAnalysis() {
   const d = an.data, days = d.days;
