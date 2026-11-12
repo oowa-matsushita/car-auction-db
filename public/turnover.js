@@ -182,7 +182,7 @@ function openWx() {
     <div class="wx-body">
       <section>
         <h3>💰 台粗利の計算</h3>
-        <div class="wx-formula">台粗利 ＝ 本体価格（税抜） − 本体原価 − <span class="hl">経費 ${inp("wxExp", exp, 0.1, 70)} 万円</span></div>
+        <div class="wx-formula">台粗利 ＝ 本体価格（値引後・税抜） − 本体原価 − <span class="hl">経費 ${inp("wxExp", exp, 0.1, 70)} 万円</span></div>
         <div class="tv-note">経費は1台あたり（陸送など）。台粗利からそのまま引きます。</div>
       </section>
       <section>
@@ -490,7 +490,7 @@ async function showCarSold(key) {
     <td>${h(r.contract_date)}</td><td>${h(r.car_name)}</td><td>${r.year ? h(r.year) : dash}</td>
     <td class="n">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString()}</td>
     <td>${r.color ? h(r.color) : dash}</td><td>${r.grade ? h(r.grade) : dash}</td>
-    <td class="n">${r.price == null ? dash : yen(r.price)}</td>
+    <td class="n" title="${r.discount ? `車両本体価格 ${yen(r.list_price)} − 値引 ${yen(-r.discount)}` : ""}">${r.price == null ? dash : yen(r.price)}${r.discount ? `<div class="tv-dim" style="font-size:11px">値引 ${yen(-r.discount)}</div>` : ""}</td>
     <td class="n">${r.cost == null ? dash : yen(r.cost)}</td>
     <td class="n"><b>${r.gross == null ? dash : yen(r.gross)}</b></td></tr>`).join("") || '<tr><td colspan="9" class="tv-dim">この月に売れた車はありません</td></tr>';
 }

@@ -75,7 +75,7 @@ const SALES_FIELDS = {
   customer: ["顧客名"],
   fees: ["販売諸費用計"],
   cost: ["本体価格原価", "車輌本体原価", "車両本体原価"],
-  discount: ["車両本体値引", "値引"],
+  discount: ["車両本体値引", "本体値引", "値引"],
   sales_amount: ["売上高"],
   stock_no: ["在庫No", "在庫NO", "在庫番号"],
   chassis_no: ["車台番号"],
@@ -108,8 +108,11 @@ async function loadExpense(db) {
   expenseYen = Math.round((Number.isFinite(v) && v >= 0 ? v : EXPENSE_DEFAULT_MAN) * 10000);
 }
 const expIn = () => Math.round(expenseYen * 1.1);
-export const grossSql = (tax) => (tax === "in" ? `(price - cost - ${expIn()})` : `(ROUND(price / 1.1) - cost - ${expenseYen})`);
-export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? r.price - r.cost - expIn() : Math.round(r.price / 1.1) - r.cost - expenseYen) : null);
+// 本体価格は値引き後で計算する（値引きは CSV でマイナスでもプラスでも「引く」）
+const NET_SQL = "(price - ABS(COALESCE(discount, 0)))";
+export const netPrice = (r) => (r.price == null ? null : r.price - Math.abs(r.discount || 0));
+export const grossSql = (tax) => (tax === "in" ? `(${NET_SQL} - cost - ${expIn()})` : `(ROUND(${NET_SQL} / 1.1) - cost - ${expenseYen})`);
+export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? netPrice(r) - r.cost - expIn() : Math.round(netPrice(r) / 1.1) - r.cost - expenseYen) : null);
 export function channelSql(ch) {
   if (ch === "retail") return "AND COALESCE(channel,'retail') = 'retail'";
   if (ch === "wholesale") return "AND channel = 'wholesale'";
@@ -317,7 +320,7 @@ export async function handleTurnover(request, env, url) {
   if (mm && method === "GET") {
     const month = mm[1];
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-    const { results: sold } = await db.prepare(`SELECT car_name, price, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
+    const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
     const models = groupModels(stock, sold, tax);
     models.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.sold - a.sold || a.name.localeCompare(b.name, "ja"));
     return json({ month, opening: stock.length, sold: sold.length, models });
@@ -359,7 +362,7 @@ export async function handleTurnover(request, env, url) {
     const out = { months: [], models: {} };
     for (const { month } of months) {
       const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-      const { results: sold } = await db.prepare(`SELECT car_name, price, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
+      const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
       out.months.push({ month, opening: stock.length, sold: sold.length, rate: stock.length ? sold.length / stock.length : null });
       for (const g of groupModels(stock, sold, tax)) {
         const m = (out.models[g.key] ||= { name: g.name, points: {} });
@@ -392,7 +395,7 @@ export async function handleTurnover(request, env, url) {
         mileage_km: inv?.mileage_km ?? veh?.mileage_km ?? null,
         color: inv?.color || veh?.color || "",
         grade: inv?.grade || veh?.grade || "",
-        price: r.price, cost: r.cost, gross: grossOf(r, tax), customer: r.customer, channel: r.channel, linked: !!inv,
+        price: netPrice(r), list_price: r.price, discount: r.discount ? -Math.abs(r.discount) : 0, cost: r.cost, gross: grossOf(r, tax), customer: r.customer, channel: r.channel, linked: !!inv,
       });
     }
     return json({ month, rows: out, linkable: list.some((r) => r.stock_no || r.chassis_no) });
