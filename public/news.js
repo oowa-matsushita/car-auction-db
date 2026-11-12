@@ -1,6 +1,15 @@
 "use strict";
 // ---------- 自動車ニュース（サーバーが各メディアの RSS を自動で集める。30分ごとに新しくなる） ----------
-const nw = { items: [], sources: [], categories: {}, cat: "", src: "", stockNames: [], loaded: false };
+const nw = { items: [], sources: [], categories: {}, cat: "focus", src: "", stockNames: [], loaded: false };
+// 注目ニュース（はじめはこれだけ表示）：生産中止・受注停止／オークション・相場／新型・モデルチェンジ
+const NW_FOCUS = [
+  ["stop", "生産中止・受注停止", /生産(を)?(中止|終了|停止|打ち切)|受注(を)?(停止|終了|再開|一時)|販売(を)?(終了|中止|停止)|出荷(を)?停止|生産終了|一時停止|絶版|ディスコン|廃止/],
+  ["auction", "オークション・相場", /オークション|相場|落札|USS|出品台数|成約率|中古車(の)?(価格|市場|流通)|残価|リセール/],
+  ["model", "新型・モデルチェンジ", /新型|フルモデルチェンジ|マイナーチェンジ|モデルチェンジ|一部改良|ビッグマイナー|(発売|発表|登場|デビュー|予約開始|先行公開|世界初公開).*(車|SUV|セダン|ミニバン|軽|EV|ハイブリッド|モデル|グレード|仕様|トラック|ワゴン)|(車|SUV|セダン|ミニバン|軽|EV|ハイブリッド|モデル|トラック|ワゴン).*(発売|発表|登場|デビュー|予約開始|世界初公開)/],
+];
+const nwText = (it) => String((it.ai_title || "") + " " + it.title + " " + (it.summary || "") + " " + (Array.isArray(it.ai_points) ? it.ai_points.join(" ") : "")).normalize("NFKC");
+const nwFocusOf = (it) => NW_FOCUS.filter(([, , re]) => re.test(nwText(it))).map(([k]) => k);
+const nwMatchCat = (it, k) => !k ? true : k === "focus" ? nwFocusOf(it).length > 0 : NW_FOCUS.some(([fk]) => fk === k) ? nwFocusOf(it).includes(k) : it.category === k;
 const nwKey = (s) => String(s || "").normalize("NFKC").toUpperCase().replace(/[\s\-‐－・]/g, "");
 async function loadNews(force) {
   if (nw.loaded && !force) return drawNews();
@@ -43,13 +52,14 @@ function drawNews() {
     .filter((it) => (!q || nwKey(it.title + it.summary).includes(q)) && (!onlyStock || stockOf(it)));
   const count = (f) => base.filter(f).length;
   const src = Object.fromEntries(nw.sources.map((s) => [s.id, s]));
-  $("nwCats").innerHTML = [["", "すべて"], ...Object.entries(nw.categories)].map(([k, l]) =>
-    `<span class="nw-chip ${nw.cat === k ? "on" : ""}" data-cat="${k}">${h(l)}<span class="n">${count((it) => (!k || it.category === k) && (!nw.src || it.source === nw.src))}</span></span>`).join("");
+  const chip = ([k, l], cls = "") => `<span class="nw-chip ${cls} ${nw.cat === k ? "on" : ""}" data-cat="${k}">${h(l)}<span class="n">${count((it) => nwMatchCat(it, k) && (!nw.src || it.source === nw.src))}</span></span>`;
+  $("nwCats").innerHTML = chip(["focus", "★ 注目（生産中止・相場・新型）"], "focus") + NW_FOCUS.map(([k, l]) => chip([k, l], "sub")).join("")
+    + '<span class="nw-sep"></span>' + [["", "すべて"], ...Object.entries(nw.categories)].map((c) => chip(c)).join("");
   $("nwSrcs").innerHTML = [`<span class="nw-chip ${nw.src === "" ? "on" : ""}" data-src="">全メディア</span>`, ...nw.sources.map((s) => {
     const st = nw.status?.[s.id];
     return `<span class="nw-chip ${nw.src === s.id ? "on" : ""}" data-src="${s.id}" title="${st && !st.ok ? "取得できませんでした：" + h(st.error) : ""}"><span class="dot" style="background:${s.color}"></span>${h(s.name)}${st && !st.ok ? " ⚠" : ""}</span>`;
   })].join("");
-  const list = base.filter((it) => (!nw.cat || it.category === nw.cat) && (!nw.src || it.source === nw.src));
+  const list = base.filter((it) => nwMatchCat(it, nw.cat) && (!nw.src || it.source === nw.src));
   const card = (it, hot) => {
     const s = src[it.source] || { name: it.source, color: "#13234a" }, st = stockOf(it);
     const fresh = Date.now() - Date.parse(it.published_at) < 6 * 3600e3;
@@ -57,7 +67,7 @@ function drawNews() {
     return `<a class="nw-card" href="${h(it.url)}" target="_blank" rel="noopener noreferrer" style="--c:${s.color}">
       ${it.image ? `<div class="img" style="background-image:url('${h(it.image)}')"></div>` : `<div class="img ph">${h(s.name)}</div>`}
       <div class="in">
-        <div class="meta"><span class="src">${h(s.name)}</span>${hot ? '<span class="hot">おすすめ</span>' : ""}${fresh ? '<span class="new">NEW</span>' : ""}<span class="cat">${h(nw.categories[it.category] || "その他")}</span><span>${ago(it.published_at)}</span></div>
+        <div class="meta"><span class="src">${h(s.name)}</span>${hot ? '<span class="hot">おすすめ</span>' : ""}${fresh ? '<span class="new">NEW</span>' : ""}${nwFocusOf(it).map((k) => `<span class="fcs">${h(NW_FOCUS.find((f) => f[0] === k)[1])}</span>`).join("") || `<span class="cat">${h(nw.categories[it.category] || "その他")}</span>`}<span>${ago(it.published_at)}</span></div>
         <div class="t">${h(it.ai_title || it.title)}</div>
         ${it.ai_title ? `<div class="orig">元の見出し：${h(it.title)}</div>` : ""}
         ${pts ? `<ul class="pts">${pts.map((p) => `<li>${h(p)}</li>`).join("")}</ul><span class="ai">AIのまとめ</span>`
