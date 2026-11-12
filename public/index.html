@@ -74,9 +74,28 @@
   #tvCarSoldTable.nolink .lk { display: none; }
   #tvCarSoldNote { font-size: 11px; }
   #tvPanel .hint { margin: auto; color: #8a93a3; font-size: 13px; }
+  /* 車名の欄の幅は変えない（OEMをまとめたときの「（〜を含む）」は小さく、はみ出す分は … で省略） */
+  #tvModelRows td.mname { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #tvModelRows td.mname .oem { font-size: 10px; color: #7c5cff; margin-left: 2px; }
   #tvModelRows tr.sel td { background: #ffe9a8 !important; }
   /* ---- 確認リスト ---- */
   #tab-review { flex: 1; min-height: 0; display: flex; }
+  /* 分析 */
+  #tab-analysis { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #eef1f6; }
+  .an-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .an-kpi { background: #fff; border-radius: 10px; padding: 10px 14px; box-shadow: 0 1px 3px rgba(20,35,74,.1); display: flex; flex-direction: column; }
+  .an-kpi span { font-size: 11px; color: #667; } .an-kpi b { font-size: 20px; color: #13234a; } .an-kpi em { font-style: normal; font-size: 11px; color: #8a93a3; }
+  .an-card { background: #fff; border-radius: 10px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(20,35,74,.1); margin-bottom: 12px; min-width: 0; }
+  .an-card h3 { margin: 0 0 8px; font-size: 14px; color: #13234a; }
+  .an-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; }
+  .an-grid .an-card { margin-bottom: 0; } .an-grid { margin-bottom: 12px; }
+  .an-tips { background: linear-gradient(135deg, #fff7ec, #fff); border: 1px solid #f6d3a8; }
+  .an-tips ul { margin: 0; padding-left: 20px; line-height: 1.8; font-size: 13px; }
+  .an-table { min-width: 0; width: 100%; font-size: 12px; } .an-table td, .an-table th { padding: 3px 6px; }
+  .an-table td:first-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .an-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 22px; } .an-spark i { width: 6px; background: #10b8c4; border-radius: 1px; }
+  .an-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .an-sub { font-weight: 700; font-size: 12px; margin: 2px 0 4px; }
+  .an-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 10px; vertical-align: -1px; }
   /* ニュース */
   #tab-news { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #eef1f6; }
   .nw-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 14px; background: var(--navy); color: #fff; }
@@ -292,6 +311,7 @@
   <button data-tab="turnover">🔄 回転率</button>
   <button data-tab="review">✅ 確認リスト <span id="rvBadge" class="rv-badge"></span></button>
   <button data-tab="news" hidden>📰 ニュース <span class="beta-tag">β</span></button>
+  <button data-tab="analysis" hidden>📊 分析 <span class="beta-tag">β</span></button>
   <button type="button" id="wxBtn" class="set-btn" title="設定（台粗利の経費・天気の基準・グラフの上限・マウスを当てたときの数字）">⚙ 設定</button>
   <a href="/logout" class="logout" title="ログアウト（次に開くときはIDとパスワードが必要です）">ログアウト</a>
   <button type="button" id="betaBtn" class="beta-btn" title="ためしに使える機能（ニュース）を表示します">ベータ OFF</button>
@@ -348,6 +368,18 @@
 </div>
 </section>
 
+<section class="tab" id="tab-analysis" hidden>
+  <div class="nw-top">
+    <span style="font-size:16px;font-weight:700">📊 分析</span>
+    <span style="font-size:12px;color:#c9e6ee">期間</span>
+    <select id="anSpan"><option value="3">直近3か月</option><option value="6" selected>直近6か月</option><option value="0">全部</option></select>
+    <span style="font-size:12px;color:#c9e6ee">数える販売</span>
+    <select id="anCh"><option value="all">小売＋業販</option><option value="retail">小売のみ</option><option value="wholesale">業販のみ</option></select>
+    <label class="nw-chk"><input type="checkbox" id="anOem"> OEMをまとめる</label>
+    <span style="flex:1"></span><span id="anInfo" style="font-size:12px;color:#c9e6ee"></span>
+  </div>
+  <div class="nw-body" id="anBody"></div>
+</section>
 <section class="tab" id="tab-news" hidden>
   <div class="nw-top">
     <span style="font-size:16px;font-weight:700">📰 自動車ニュース</span>
@@ -858,5 +890,6 @@ watchProgress();
 <script src="review.js"></script>
 <script src="turnover.js"></script>
 <script src="news.js"></script>
+<script src="analysis.js"></script>
 </body>
 </html>

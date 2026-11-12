@@ -1,8 +1,8 @@
 "use strict";
 // ---------- タブの切り替え（#ledger / #turnover） ----------
-const TABS = ["ledger", "turnover", "review", "news"];
+const TABS = ["ledger", "turnover", "review", "news", "analysis"];
 // ベータ機能（ニュースのタブ）。右上の「ベータ」ボタンで ON/OFF（このパソコンに覚える。はじめは OFF）
-const BETA_TABS = ["news"];
+const BETA_TABS = ["news", "analysis"];
 const betaOn = () => { try { return localStorage.getItem("mmsBeta") === "1"; } catch { return false; } };
 function applyBeta() {
   const on = betaOn();
@@ -18,6 +18,7 @@ function showTab(name) {
   if (name === "turnover") loadTurnover();
   if (name === "review") loadReview();
   if (name === "news" && typeof loadNews === "function") loadNews();
+  if (name === "analysis" && typeof loadAnalysis === "function") loadAnalysis();
 }
 document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 applyBeta();
@@ -26,7 +27,7 @@ document.getElementById("betaBtn").onclick = () => {
   try { localStorage.setItem("mmsBeta", on ? "1" : "0"); } catch {}
   applyBeta();
   if (!on && BETA_TABS.some((t) => !document.getElementById("tab-" + t).hidden)) showTab("ledger");
-  else if (on) showTab("news");
+  else if (on) showTab("analysis");
 };
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 
@@ -270,7 +271,7 @@ function drawModels() {
   const minOn = $("tvMinOn").checked, minN = Number($("tvMinN").value) || 0;
   const list = sortModels(tvModels).filter((m) => (!q || m.name.normalize("NFKC").toUpperCase().replace(/[\s\-‐－]/g, "").includes(q)) && (!minOn || m.opening >= minN));
   $("tvModelRows").innerHTML = list.map((m) => `<tr data-key="${h(m.key)}" class="${m.key === tvSelKey ? "sel" : ""}">
-    <td>${h(m.name)}</td>
+    <td class="mname" title="${h(m.name)}">${(() => { const i = m.name.indexOf("（"); return i > 0 ? `${h(m.name.slice(0, i))}<span class="oem">${h(m.name.slice(i))}</span>` : h(m.name); })()}</td>
     <td class="n">${m.opening.toLocaleString()}台</td>
     <td class="n">${m.sold.toLocaleString()}台</td>
     <td class="n tv-rate">${m.rate == null ? '<span class="tv-dim" style="font-size:12px;font-weight:400">月初在庫なし</span>' : pct(m.rate)}</td>

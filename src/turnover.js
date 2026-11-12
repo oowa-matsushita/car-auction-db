@@ -102,7 +102,7 @@ export function salesChannel(r) {
 // 経費は「設定」画面で決める（万円。はじめは3.5万円）。台粗利（税抜）からそのまま引く
 export const EXPENSE_DEFAULT_MAN = 3.5;
 let expenseYen = EXPENSE_DEFAULT_MAN * 10000;
-async function loadExpense(db) {
+export async function loadExpense(db) {
   const r = await db.prepare("SELECT value FROM app_settings WHERE key = 'weather'").first().catch(() => null);
   const v = r ? Number(JSON.parse(r.value).expense) : NaN;
   expenseYen = Math.round((Number.isFinite(v) && v >= 0 ? v : EXPENSE_DEFAULT_MAN) * 10000);
@@ -217,7 +217,7 @@ export function modelName(name, oem = false) {
 const modelKey = (name, oem = false) => modelName(name, oem).toUpperCase().replace(/[\s\-‐－]/g, "");
 
 // 月初在庫と販売の車名を、車の種類ごとにまとめて数える
-function groupModels(stockRows, soldRows, tax = "ex", oem = false) {
+export function groupModels(stockRows, soldRows, tax = "ex", oem = false) {
   const groups = new Map();
   const add = (name, field) => {
     const key = modelKey(name, oem);
@@ -240,7 +240,7 @@ function groupModels(stockRows, soldRows, tax = "ex", oem = false) {
     name: Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0] + (g.oems.size ? `（${[...g.oems].join("・")}を含む）` : ""), // いちばん多い書き方で表示
     opening: g.opening, sold: g.sold,
     rate: g.opening ? g.sold / g.opening : null,
-    gross_avg: g.gn ? Math.round(g.gsum / g.gn) : null, gross_total: g.gn ? g.gsum : null,
+    gross_avg: g.gn ? Math.round(g.gsum / g.gn) : null, gross_total: g.gn ? g.gsum : null, gross_n: g.gn,
   }));
 }
 
@@ -477,8 +477,8 @@ const JP_HOLIDAYS = new Set([
   "2027-07-19", "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03", "2027-11-23",
 ]);
 const dayStr = (y, mo, d) => `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-const isOffDay = (s) => { const w = new Date(s + "T00:00:00Z").getUTCDay(); return w === 0 || w === 6 || JP_HOLIDAYS.has(s); };
-function daysOfMonth(month) {
+export const isOffDay = (s) => { const w = new Date(s + "T00:00:00Z").getUTCDay(); return w === 0 || w === 6 || JP_HOLIDAYS.has(s); };
+export function daysOfMonth(month) {
   const [y, mo] = month.split("-").map(Number), n = new Date(Date.UTC(y, mo, 0)).getUTCDate();
   return Array.from({ length: n }, (_, i) => dayStr(y, mo, i + 1));
 }

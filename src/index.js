@@ -3,6 +3,7 @@ import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
 import { REVIEW_ADDED_COLUMNS, handleReview, loadPriceUnits, fixPriceUnit } from "./review.js";
 import { handleNews, refreshNews, summarizeNews } from "./news.js";
+import { handleAnalysis } from "./analysis.js";
 import { TURNOVER_SCHEMA, TURNOVER_ADDED_COLUMNS, handleTurnover } from "./turnover.js";
 
 // ---- 項目定義 ---------------------------------------------------------------
@@ -587,6 +588,12 @@ export default {
             "content-disposition": `attachment; filename="backup_${new Date().toISOString().slice(0, 10)}.tsv"`,
           },
         });
+      }
+
+      // 分析（ベータ）・天気データ
+      if (path === "/api/analysis" || path === "/api/weather") {
+        const res = await handleAnalysis(request, env, url);
+        if (res) return res;
       }
 
       // 自動車ニュース
