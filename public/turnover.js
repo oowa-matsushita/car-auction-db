@@ -202,6 +202,14 @@ function openWx() {
         <h3>📈 グラフの上限 <span class="tv-note" style="font-weight:400">（どの車でも同じ目盛り。超える値は端に▲で表示）</span></h3>
         <div class="wx-row">回転率 ${inp("wxCR", ch.rate, 5)} %まで　　平均台粗利 ${inp("wxCG", ch.gross, 5)} 万円まで</div>
       </section>
+      <section>
+        <h3>🖱️ 仕入れ台帳でマウスを当てたときの数字</h3>
+        <div class="wx-row" style="display:flex;gap:18px;flex-wrap:wrap">
+          <label style="cursor:pointer"><input type="radio" name="wxHover" value="latest" ${(c.hover || "latest") === "latest" ? "checked" : ""}> 最新月（今月は途中の数字と着地予想）</label>
+          <label style="cursor:pointer"><input type="radio" name="wxHover" value="avg3" ${c.hover === "avg3" ? "checked" : ""}> 直近3か月の平均（今月を除く）</label>
+        </div>
+        <div class="tv-note">回転率・台粗利・天気マークをどちらで出すかを選びます。グラフはどちらでも同じです。</div>
+      </section>
       <div id="wxErr" class="wx-err"></div>
       <div class="wx-foot">
         <button type="button" class="btn btn-ok" id="wxSave" style="padding:6px 22px;font-size:14px">保存</button>
@@ -217,7 +225,7 @@ function openWx() {
     $("wxDlg").close(); await loadWx(); loadTurnover();
   };
   $("wxSave").onclick = async () => {
-    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") }, expense: v("wxExp") };
+    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") }, expense: v("wxExp"), hover: document.querySelector('input[name="wxHover"]:checked')?.value || "latest" };
     const desc = (a) => a.every((x, i) => i === 0 || a[i - 1] > x);
     const err = [...b.rate, ...b.gross, ...b.levels, b.chart.rate, b.chart.gross, b.expense].some((x) => !Number.isFinite(x)) ? "空欄があります"
       : b.expense < 0 ? "経費は 0 以上にしてください"
@@ -539,16 +547,29 @@ function ledgerPopHtml(car) {
   const m = tvHistory?.models[key];
   if (!m) return `<b>${h(modelNameC(car) || car || "（車名なし）")}</b><div class="tv-note" style="margin-top:4px">この車種は、月初在庫・販売データに見つかりません。</div>`;
   const pts = modelPoints(key);
-  const last = [...pts].reverse().find((p) => p.rate != null || p.sold) || pts[pts.length - 1];
+  let last, label, fc = null;
+  if (wxCfg.hover === "avg3") {
+    // 直近3か月（今月を除く）の平均：回転率＝販売合計÷月初在庫合計、台粗利＝販売台数で重み付けした平均
+    const cur = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+    const all = [...tvHistory.months].map((x) => x.month).sort().filter((mo) => mo < cur).slice(-3);
+    const ps = all.map((mo) => ({ month: mo, ...(m.points[mo] || { opening: 0, sold: 0, rate: null, gross_avg: null }) }));
+    const op = ps.reduce((s, p) => s + (p.opening || 0), 0), so = ps.reduce((s, p) => s + (p.sold || 0), 0);
+    const gw = ps.filter((p) => p.gross_avg != null && p.sold), gs = gw.reduce((s, p) => s + p.sold, 0);
+    last = ps.length ? { month: all[all.length - 1], opening: op, sold: so, rate: op ? so / op : null, gross_avg: gs ? Math.round(gw.reduce((s, p) => s + p.gross_avg * p.sold, 0) / gs) : null } : null;
+    label = all.length ? `直近3か月（${Number(all[0].slice(5))}〜${Number(all[all.length - 1].slice(5))}月）の平均` : "";
+  } else {
+    last = [...pts].reverse().find((p) => p.rate != null || p.sold) || pts[pts.length - 1];
+    fc = tvForecast && last && tvForecast.month === last.month && last.rate != null ? last.rate * tvForecast.factor : null;
+    label = last ? monthLabel(last.month) + (fc != null ? "（途中）" : "") : "";
+  }
   const w = last ? weatherOf(last) : null;
-  const fc = tvForecast && last && tvForecast.month === last.month && last.rate != null ? last.rate * tvForecast.factor : null;
   return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><b>${h(m.name)}</b>
-      <span class="tv-note">${last ? monthLabel(last.month) + (fc != null ? "（途中）" : "") : ""}</span>
+      <span class="tv-note">${label}</span>
       ${w ? `<span class="${w.label === "台風" ? "wx-red" : ""}" style="margin-left:auto;font-size:13px"><span>${w.icon}</span>${w.label}</span>` : ""}</div>
     <div style="font-size:13px;margin:4px 0 2px">回転率 <b style="color:#0b6f78">${last ? pct(last.rate) : "—"}</b>
       ${fc != null ? `<span class="tv-fc" style="margin-left:4px">着地予想 ${pct(fc)}</span>` : ""}
       　台粗利 <b style="color:#c25a00">${last ? man1(last.gross_avg) : "—"}</b>
-      <div class="tv-note">月初在庫 ${last?.opening ?? 0}台・販売 ${last?.sold ?? 0}台</div></div>
+      <div class="tv-note">${wxCfg.hover === "avg3" ? "3か月の" : ""}月初在庫 ${last?.opening ?? 0}台・販売 ${last?.sold ?? 0}台</div></div>
     ${dualChartSvg(pts, 380, 210)}`;
 }
 function placePop(pop, x, y) {

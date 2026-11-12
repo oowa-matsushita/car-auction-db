@@ -231,6 +231,8 @@ export async function handleTurnover(request, env, url) {
       // グラフの上限（回転率 %・台粗利 万円）。無ければ はじめの値（80% / 40万円）
       if (b.chart && Number(b.chart.rate) > 0 && Number(b.chart.gross) > 0) v.chart = { rate: Number(b.chart.rate), gross: Number(b.chart.gross) };
       // 1台あたりの経費（万円）。台粗利から引く
+      // 仕入れ台帳でマウスを当てたときの数字：latest＝最新月、avg3＝直近3か月（今月を除く）の平均
+      if (b.hover === "latest" || b.hover === "avg3") v.hover = b.hover;
       if (b.expense !== undefined && b.expense !== null && Number.isFinite(Number(b.expense)) && Number(b.expense) >= 0) v.expense = Number(b.expense);
       await db.prepare("INSERT INTO app_settings (key, value) VALUES ('weather', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')").bind(JSON.stringify(v)).run();
       return json({ ok: true, weather: v });
