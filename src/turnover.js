@@ -214,7 +214,7 @@ export function modelName(name, oem = false) {
   return oem ? OEM_MAP[s.replace(/\s/g, "").toUpperCase()] || s : s;
 }
 // 同じ車とみなすための鍵（大文字小文字・ハイフン・空白の違いを無視）
-const modelKey = (name, oem = false) => modelName(name, oem).toUpperCase().replace(/[\s\-‐－]/g, "");
+export const modelKey = (name, oem = false) => modelName(name, oem).toUpperCase().replace(/[\s\-‐－]/g, "");
 
 // 月初在庫と販売の車名を、車の種類ごとにまとめて数える
 export function groupModels(stockRows, soldRows, tax = "ex", oem = false) {

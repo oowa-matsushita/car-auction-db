@@ -1,8 +1,10 @@
 import { json } from "./util.js";
-import { channelSql, grossOf, netPrice, loadExpense, groupModels, isOffDay, daysOfMonth } from "./turnover.js";
+import { channelSql, grossOf, netPrice, loadExpense, groupModels, isOffDay, daysOfMonth, modelKey, modelName } from "./turnover.js";
 
 // ---- 分析（ベータ）：売れている車・売れている日・天気との関係 ---------------------------------
 export const ANALYSIS_SCHEMA = [
+  // 施策メモ（社長のノウハウ）：いつ・どの車種に・何をしたか。効果は販売データから自動で計算する
+  "CREATE TABLE IF NOT EXISTS knowhow ( id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT NOT NULL, kind TEXT, start_date TEXT NOT NULL, end_date TEXT, detail TEXT, created_at TEXT DEFAULT (datetime('now','localtime')) )",
   "CREATE TABLE IF NOT EXISTS weather_daily ( date TEXT PRIMARY KEY, place TEXT, temp REAL, rain REAL, wind REAL, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
 ];
 
@@ -35,6 +37,41 @@ export async function handleAnalysis(request, env, url) {
       .bind(r.date, r.place, r.temp, r.rain, r.wind));
     for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
     return json({ ok: true, count: rows.length, place: rows[0].place, from: rows[0].date, to: rows[rows.length - 1].date });
+  }
+
+  // 施策メモ：一覧（効果つき）・追加・削除
+  if (path === "/api/knowhow" || path.startsWith("/api/knowhow/")) {
+    if (method === "POST") {
+      const b = await request.json().catch(() => ({}));
+      if (!String(b.model || "").trim() || !/^\d{4}-\d{2}-\d{2}$/.test(b.start || "")) return json({ error: "車種と開始日を入れてください" }, 400);
+      await db.prepare("INSERT INTO knowhow (model, kind, start_date, end_date, detail) VALUES (?,?,?,?,?)")
+        .bind(String(b.model).trim(), b.kind || "その他", b.start, /^\d{4}-\d{2}-\d{2}$/.test(b.end || "") ? b.end : null, String(b.detail || "").trim()).run();
+      return json({ ok: true });
+    }
+    const del = path.match(/^\/api\/knowhow\/(\d+)$/);
+    if (del && method === "DELETE") { await db.prepare("DELETE FROM knowhow WHERE id = ?").bind(Number(del[1])).run(); return json({ ok: true }); }
+    if (method === "GET") {
+      await loadExpense(db);
+      const { results: list } = await db.prepare("SELECT * FROM knowhow ORDER BY start_date DESC, id DESC").all();
+      const { results: sales } = await db.prepare("SELECT contract_date AS d, car_name, price, discount, cost, channel FROM sales_items WHERE COALESCE(channel,'') <> 'exclude'").all();
+      const last = sales.reduce((m, r) => (r.d && r.d > m ? r.d : m), "");
+      const dayMs = 864e5, toT = (d) => Date.parse(d + "T00:00:00Z"), toD = (t) => new Date(t).toISOString().slice(0, 10);
+      for (const k of list) {
+        const key = modelKey(k.model);
+        const mine = sales.filter((r) => r.d && modelKey(r.car_name) === key);
+        // 施策の期間（終わりが無ければ、販売データの最後の日まで）と、その前の60日を比べる（1日あたりの台数）
+        const aEnd = k.end_date && k.end_date < last ? k.end_date : last;
+        const aDays = aEnd >= k.start_date ? Math.round((toT(aEnd) - toT(k.start_date)) / dayMs) + 1 : 0;
+        const bStart = toD(toT(k.start_date) - 60 * dayMs), bEnd = toD(toT(k.start_date) - dayMs);
+        const pick = (from, to) => mine.filter((r) => r.d >= from && r.d <= to);
+        const A = aDays ? pick(k.start_date, aEnd) : [], Bf = pick(bStart, bEnd);
+        const g = (rs) => { const v = rs.map((r) => grossOf(r, "ex")).filter((x) => x != null); return v.length ? Math.round(v.reduce((s, x) => s + x, 0) / v.length) : null; };
+        Object.assign(k, { key, name: modelName(k.model), after_days: aDays, after_sold: A.length, after_per_day: aDays ? A.length / aDays : null, after_gross: g(A),
+          before_sold: Bf.length, before_per_day: Bf.length / 60, before_gross: g(Bf), lift: aDays && Bf.length ? (A.length / aDays) / (Bf.length / 60) - 1 : null,
+          active: k.start_date <= last && (!k.end_date || k.end_date >= last), through: last });
+      }
+      return json({ items: list, through: last });
+    }
   }
 
   // 今月の小売台数の目標（月ごとに保存。みんなで共通）と、その月の日ごとの小売台数

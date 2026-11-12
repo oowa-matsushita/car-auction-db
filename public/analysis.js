@@ -47,12 +47,13 @@ function anAdvice(d, days) {
   const done = curPartial ? ms.slice(0, -1) : ms;
   if (!done.length) return null;
   const latest = [...ms].reverse().find((mo) => d.models.some((m) => (m.open_by_month || {})[mo]));
-  const rows = d.models.map((m) => {
+  const rowsAll = d.models.map((m) => {
     let so = 0, op = 0, gs = 0, gn = 0;
     for (const mo of done) { so += m.by_month[mo] || 0; op += (m.open_by_month || {})[mo] || 0; const g = (m.gross_by_month || {})[mo]; if (g) { gs += g[0]; gn += g[1]; } }
     const per = so / done.length, stock = (m.open_by_month || {})[latest] || 0;
-    return { name: m.name, sold: so, opening: op, rate: op ? so / op : null, gross: gn ? gs / gn : null, per, stock, cover: per ? stock / per : Infinity };
-  }).filter((r) => r.opening >= 3 * done.length || r.sold >= 2 * done.length); // 数字が少なすぎる車種は除く
+    return { key: m.key, name: m.name, sold: so, opening: op, rate: op ? so / op : null, gross: gn ? gs / gn : null, per, stock, cover: per ? stock / per : Infinity };
+  });
+  const rows = rowsAll.filter((r) => r.opening >= 3 * done.length || r.sold >= 2 * done.length); // 数字が少なすぎる車種は除く
   const tot = rows.reduce((a, r) => ({ s: a.s + r.sold, o: a.o + r.opening, g: a.g + (r.gross ?? 0) * r.sold, n: a.n + (r.gross != null ? r.sold : 0) }), { s: 0, o: 0, g: 0, n: 0 });
   const R = tot.o ? tot.s / tot.o : 0, G = tot.n ? tot.g / tot.n : 0;
   const man = (v) => (v / 10000).toFixed(1) + "万円";
@@ -62,6 +63,15 @@ function anAdvice(d, days) {
   const grow = rows.filter((r) => ok(r) && r.rate >= Math.max(R * 1.3, 0.3) && r.gross >= G * 0.9 && r.per >= 2 && r.stock < r.per * 2.5 - 0.5)
     .map((r) => ({ ...r, target: Math.round(r.per * 2.5), add: Math.max(1, Math.round(r.per * 2.5 - r.stock)), score: (r.rate / R) * (r.gross / G) }))
     .sort((a, b) => b.score - a.score).slice(0, 8);
+  // 施策メモ（社長のノウハウ）：実施中の施策で、前の60日より1日あたりの販売が30%以上増えた車種は「施策の効果あり」として在庫を増やす候補に入れる
+  const khBy = {};
+  for (const k of (an.kh || [])) if (k.active) (khBy[k.key] ||= []).push(k);
+  for (const r of rowsAll) {
+    const ks = khBy[r.key];
+    if (!ks || grow.some((g) => g.key === r.key)) continue;
+    const best = ks.filter((k) => k.lift != null && k.lift >= 0.3).sort((a, b) => b.lift - a.lift)[0];
+    if (best) grow.push({ ...r, kh: best });
+  }
   // ② 値上げを試せる：よく売れるのに粗利が薄い
   const up = rows.filter((r) => ok(r) && r.rate >= Math.max(R * 1.3, 0.3) && r.gross < G * 0.7 && r.per >= 2)
     .sort((a, b) => b.rate - a.rate).slice(0, 6);
@@ -72,7 +82,7 @@ function anAdvice(d, days) {
   const row = (r, kind) => {
     const target = Math.round(r.per * 2.5), diff = target - r.stock;
     let price = "—", act = "";
-    if (kind === "grow") act = "仕入れを増やす";
+    if (kind === "grow") act = r.kh ? `施策の効果あり（1日の販売 ${r.kh.lift >= 0 ? "+" : ""}${Math.round(r.kh.lift * 100)}%）→ 仕入れを増やす` : "仕入れを増やす";
     if (kind === "up") { price = '<span class="up">+3〜5万円</span>'; act = "値上げを試す"; }
     if (kind === "slow") {
       const room = r.gross != null ? r.gross - G : null;
@@ -81,7 +91,8 @@ function anAdvice(d, days) {
       else { act = r.gross != null && r.gross < 0 ? "仕入れ停止・業販へ" : "仕入れ減・業販へ"; }
     }
     const cover = isFinite(r.cover) ? r.cover.toFixed(1) : "—";
-    return `<tr><td class="nm">${h(r.name)}</td>
+    const kh = (an.kh || []).filter((k) => k.active && k.key === r.key);
+    return `<tr><td class="nm">${h(r.name)}${kh.map((k) => `<span class="kh-b" title="${h(k.start_date)}〜${h(k.end_date || "")}：${h(k.detail || "")}">📝${h(k.kind)}</span>`).join("")}</td>
       <td class="n">${pct(r.rate)}</td><td class="n${r.gross != null && r.gross < 0 ? " neg" : ""}">${r.gross == null ? "—" : man(r.gross)}</td>
       <td class="n">${r.per.toFixed(1)}台</td><td class="n">${r.stock}台</td>
       <td class="n${isFinite(r.cover) && r.cover >= 4 ? " warn" : ""}">${cover}${isFinite(r.cover) ? "か月" : ""}</td>
@@ -174,6 +185,7 @@ function drawAnalysis() {
   };
   const tRow = (m) => `<tr><td>${h(m.name)}</td><td class="n"><b>${m.now}</b>台</td><td class="n">${m.pAvg.toFixed(1)}台</td><td class="n" style="color:${m.diff >= 0 ? "#1f9d45" : "#c62828"};font-weight:700">${m.diff >= 0 ? "+" : ""}${m.diff.toFixed(1)}</td></tr>`;
 
+  if (!an.khLoaded) { an.khLoaded = true; loadKnowhow(); }
   const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
     <div class="an-kpis">
@@ -186,6 +198,7 @@ function drawAnalysis() {
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
+    <div class="an-card kh" id="anKh"><h3>📝 施策メモ（社長のノウハウ）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-grid">
       <div class="an-card"><h3>📅 曜日別（1日あたりの販売台数）</h3>${anBars(dowItems)}</div>
       <div class="an-card"><h3>☔ 雨の量と売れ行き <span class="tv-note">（普段＝同じ月・同じ曜日の種類の日と比べた増減）</span></h3>${hasWx ? anBars(rainItems, { fmt: (v) => pctS(v), color: "#3d7be5" }) : '<div class="tv-note">天気のデータがありません</div>'}</div>
@@ -203,6 +216,7 @@ function drawAnalysis() {
     <div class="an-card"><h3>🏆 よく売れた日 TOP10</h3>
       <table class="tv-table an-table"><thead><tr><th>日付</th><th>曜日</th><th>販売</th><th>天気（${h(d.place || "")}）</th><th>普段との差</th></tr></thead><tbody>${topDays.map((x) => `<tr><td>${x.date}</td><td>${AN_DOW[x.dow]}${x.off && x.dow >= 1 && x.dow <= 5 ? "（祝）" : ""}</td><td class="n"><b>${x.sold}</b>台</td><td>${wxTxt(x)}</td><td class="n">${pctS(x.idx - 1)}</td></tr>`).join("")}</tbody></table></div>`;
   loadTarget();
+  drawKnowhow();
   $("anInfo").textContent = hasWx ? `天気：${d.place || ""}（気象庁）` : "天気データなし";
 }
 ["anCh", "anSpan", "anOem"].forEach((id) => $(id).addEventListener("change", loadAnalysis));
@@ -272,4 +286,46 @@ function bindTg() {
   };
   b.onclick = save;
   $("anTgIn").addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+}
+
+// ---------- 施策メモ（社長のノウハウ）：いつ・どの車種に・何をしたかを記録し、効果を自動で測る ----------
+async function loadKnowhow() {
+  try { const r = await fetch("/api/knowhow"); const d = await r.json(); an.kh = d.items || []; an.khThrough = d.through; } catch { an.kh = []; }
+  if (an.data) drawAnalysis();
+}
+function drawKnowhow() {
+  const box = $("anKh");
+  if (!box) return;
+  const names = [...new Set((an.data?.models || []).map((m) => m.name.replace(/（.*$/, "")))].sort((a, b) => a.localeCompare(b, "ja"));
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const KINDS = ["値下げ", "値上げ", "重点販売", "仕入れ強化", "仕入れ停止", "広告・掲載", "その他"];
+  const lift = (k) => (k.lift == null ? "—" : `<b class="${k.lift >= 0 ? "plus" : "minus"}">${k.lift >= 0 ? "+" : ""}${Math.round(k.lift * 100)}%</b>`);
+  const man = (v) => (v == null ? "—" : (v / 10000).toFixed(1) + "万");
+  box.innerHTML = `<h3>📝 施策メモ（社長のノウハウ） <span class="tv-note">価格変更や重点販売を記録すると、前の60日と比べた効果を自動で出し、AI分析にも反映します</span></h3>
+    <div class="kh-form">
+      <input id="khModel" list="khModels" placeholder="車種（例：ライズ）" style="width:150px"><datalist id="khModels">${names.map((n) => `<option value="${h(n)}">`).join("")}</datalist>
+      <select id="khKind">${KINDS.map((k) => `<option>${k}</option>`).join("")}</select>
+      <label>開始 <input type="date" id="khStart" value="${today}"></label>
+      <label>終了 <input type="date" id="khEnd"></label>
+      <input id="khDetail" placeholder="内容・ねらい（例：売れるように5万円値下げ。今月の重点車種）" style="flex:1;min-width:240px">
+      <button class="btn btn-ok" id="khAdd">記録する</button>
+    </div>
+    ${(an.kh || []).length ? `<table class="tv-table kh-table"><thead><tr><th>車種</th><th>施策</th><th>期間</th><th>内容・ねらい</th><th>施策中の販売</th><th>前の60日</th><th>1日あたりの変化</th><th>台粗利（前→中）</th><th></th></tr></thead><tbody>
+      ${an.kh.map((k) => `<tr class="${k.active ? "on" : ""}"><td class="nm">${h(k.name || k.model)}${k.active ? '<span class="kh-b">実施中</span>' : ""}</td><td>${h(k.kind || "")}</td>
+        <td>${h(k.start_date.slice(5).replace("-", "/"))}〜${k.end_date ? h(k.end_date.slice(5).replace("-", "/")) : ""}</td><td class="dt">${h(k.detail || "")}</td>
+        <td class="n">${k.after_days ? `${k.after_sold}台（${k.after_days}日）` : "まだ"}</td><td class="n">${k.before_sold}台</td><td class="n">${lift(k)}</td>
+        <td class="n">${man(k.before_gross)} → ${man(k.after_gross)}</td><td><button class="btn btn-sub" data-khdel="${k.id}" style="padding:1px 6px;font-size:11px">削除</button></td></tr>`).join("")}</tbody></table>`
+      : '<div class="tv-dim" style="margin-top:6px">まだ記録はありません。</div>'}
+    <div class="tv-note" style="margin-top:4px">効果＝施策を始めた日から${an.khThrough ? an.khThrough.slice(5).replace("-", "/") : "最新"}まで（終了日があればその日まで）の1日あたりの販売台数を、始める前の60日と比べたもの（小売＋業販）。実施中で+30%以上の車種は、AI分析の「在庫を増やしたい車種」に「施策の効果あり」として入ります。</div>`;
+  $("khAdd").onclick = async () => {
+    const body = { model: $("khModel").value, kind: $("khKind").value, start: $("khStart").value, end: $("khEnd").value, detail: $("khDetail").value };
+    if (!body.model.trim() || !body.start) return alert("車種と開始日を入れてください");
+    const r = await fetch("/api/knowhow", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) return alert((await r.json().catch(() => ({}))).error || "記録できませんでした");
+    loadKnowhow();
+  };
+  box.querySelectorAll("[data-khdel]").forEach((b) => (b.onclick = async () => {
+    if (!confirm("この施策メモを消しますか？")) return;
+    await fetch("/api/knowhow/" + b.dataset.khdel, { method: "DELETE" }); loadKnowhow();
+  }));
 }
