@@ -34,7 +34,8 @@ addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 // 数える販売（小売＋業販 / 小売のみ / 業販のみ）。選んだものはこのブラウザに覚えておく
 const tvCh = () => $("tvCh").value;
 // 台粗利は いつも「本体価格を税抜にして − 本体原価」で計算する
-const tvQs = () => `ch=${tvCh()}&tax=ex`;
+const tvOem = () => { const el = document.getElementById("tvOem"); return !!(el && el.checked); };
+const tvQs = () => `ch=${tvCh()}&tax=ex${tvOem() ? "&oem=1" : ""}`;
 const man1 = (v) => (v == null ? "—" : (v / 10000).toFixed(1) + "万円");
 try { const v = localStorage.getItem("tvCh"); if (v) $("tvCh").value = v; } catch {}
 $("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch {} clearPanel(); loadTurnover(); };
@@ -285,6 +286,7 @@ $("tvModelFilter").addEventListener("input", drawModels);
 $("tvModelClear").onclick = () => {
   $("tvModelFilter").value = "";
   $("tvMinOn").checked = true; $("tvMinN").value = 5;
+  if ($("tvOem").checked) { $("tvOem").checked = false; try { localStorage.setItem("tvOem", "0"); } catch {} tvHistory = null; loadTurnover(); }
   try { localStorage.removeItem("tvMin"); } catch {}
   tvSort.key = "weather"; tvSort.dir = "desc";
   clearPanel();
@@ -293,6 +295,9 @@ $("tvModelClear").onclick = () => {
 };
 // 「月初在庫●台以上のみ」（はじめは5台以上だけ表示。変えた値はこのパソコンに覚える）
 try { const v = JSON.parse(localStorage.getItem("tvMin") || "null"); if (v) { $("tvMinOn").checked = !!v.on; $("tvMinN").value = v.n; } } catch {}
+// 「OEMをまとめる」（このパソコンに覚える。はじめは OFF）。押すと車種のまとめ方が変わるので読み直す
+try { $("tvOem").checked = localStorage.getItem("tvOem") === "1"; } catch {}
+$("tvOem").addEventListener("change", () => { try { localStorage.setItem("tvOem", $("tvOem").checked ? "1" : "0"); } catch {} clearPanel(); tvHistory = null; loadTurnover(); });
 const saveMin = () => { try { localStorage.setItem("tvMin", JSON.stringify({ on: $("tvMinOn").checked, n: Number($("tvMinN").value) || 0 })); } catch {} };
 $("tvMinOn").addEventListener("change", () => { saveMin(); drawModels(); });
 $("tvMinN").addEventListener("input", () => { if (!$("tvMinOn").checked) $("tvMinOn").checked = true; saveMin(); drawModels(); });
@@ -529,7 +534,24 @@ const MODEL_ALIASES_C = {
   "クリッパー": "クリッパーバン", "クリッパーV": "クリッパーバン", "ハイゼット": "ハイゼットカーゴ", "ハイゼットバン": "ハイゼットカーゴ",
   "NV200バネットV": "NV200バネットバン", "クリッパリオ": "クリッパーリオ", "エブリイV": "エブリイ", "エブリイバン": "エブリイ", "アトレーV": "アトレー", "アトレーデッキバン": "アトレー",
 };
-function modelNameC(name) {
+// OEM車 → 元の車種（「OEMをまとめる」を押したときだけ使う）。キーは車名のまとめ方をしたあと（空白なし・大文字）
+const OEM_MAP_C = {
+  // ダイハツ製
+  "ピクシスエポック": "ミライース", "プレオプラス": "ミライース", "プレオ": "ミラ", "ピクシスジョイ": "キャスト", "ピクシスメガ": "ウェイク",
+  "ピクシスバン": "ハイゼットカーゴ", "サンバーバン": "ハイゼットカーゴ", "ピクシストラック": "ハイゼットトラック", "サンバートラック": "ハイゼットトラック",
+  "シフォン": "タント", "ステラ": "ムーヴ", "トール": "ルーミー", "ジャスティ": "ルーミー", "タンク": "ルーミー", "ロッキー": "ライズ",
+  // スズキ製
+  "フレア": "ワゴンR", "フレアワゴン": "スペーシア", "フレアワゴンカスタムスタイル": "スペーシア", "フレアクロスオーバー": "ハスラー", "キャロル": "アルト",
+  "スクラム": "エブリイ", "スクラムバン": "エブリイ", "クリッパーバン": "エブリイ", "ミニキャブバン": "エブリイ", "ミニキャブ": "エブリイ",
+  "スクラムワゴン": "エブリイワゴン", "クリッパーリオ": "エブリイワゴン", "タウンボックス": "エブリイワゴン",
+  "スクラムトラック": "キャリイ", "クリッパートラック": "キャリイ", "ミニキャブトラック": "キャリイ", "キャリイトラック": "キャリイ",
+  "デリカD:2": "ソリオ", "ランディ": "セレナ",
+  // 日産・三菱の共同開発車
+  "EKワゴン": "デイズ", "EKクロス": "デイズ", "EKスペース": "ルークス", "EKクロススペース": "ルークス", "EKクロスEV": "サクラ",
+  // スバル・トヨタ
+  "BRZ": "GR86",
+};
+function modelNameC(name, oem = false) {
   let s = String(name ?? "").normalize("NFKC").split(/[▼■●★☆◇◆※□△▲]/)[0];
   s = s.replace(/[−‐–—_]/g, "-").replace(/ムーブ/g, "ムーヴ").replace(/エブリィ/g, "エブリイ").replace(/アクティー/g, "アクティ")
     .replace(/アウトランダ(?!ー)/g, "アウトランダー").replace(/クラウンクロスオバ/g, "クラウンクロスオーバー").replace(/^NT100\s*クリッパー/, "クリッパートラック").replace(/^NV100\s*/, "")
@@ -548,9 +570,10 @@ function modelNameC(name) {
     const t = s.replace(/\s+e$/i, "").trim(); // 「N-VAN e」
     if (t !== s) { s = t; changed = true; }
   }
-  return MODEL_ALIASES_C[s.replace(/\s/g, "").toUpperCase()] || s;
+  s = MODEL_ALIASES_C[s.replace(/\s/g, "").toUpperCase()] || s;
+  return oem ? OEM_MAP_C[s.replace(/\s/g, "").toUpperCase()] || s : s;
 }
-const modelKeyC = (name) => modelNameC(name).toUpperCase().replace(/[\s\-‐－]/g, "");
+const modelKeyC = (name) => modelNameC(name, tvOem()).toUpperCase().replace(/[\s\-‐－]/g, "");
 
 let ledgerTvLoading = null;
 function ensureTvData() {

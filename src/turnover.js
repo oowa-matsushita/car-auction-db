@@ -174,7 +174,24 @@ const MODEL_ALIASES = {
   "クリッパー": "クリッパーバン", "クリッパーV": "クリッパーバン", "ハイゼット": "ハイゼットカーゴ", "ハイゼットバン": "ハイゼットカーゴ",
   "NV200バネットV": "NV200バネットバン", "クリッパリオ": "クリッパーリオ", "エブリイV": "エブリイ", "エブリイバン": "エブリイ", "アトレーV": "アトレー", "アトレーデッキバン": "アトレー",
 };
-export function modelName(name) {
+// OEM車 → 元の車種（「OEMをまとめる」を押したときだけ使う）。キーは車名のまとめ方をしたあと（空白なし・大文字）
+const OEM_MAP = {
+  // ダイハツ製
+  "ピクシスエポック": "ミライース", "プレオプラス": "ミライース", "プレオ": "ミラ", "ピクシスジョイ": "キャスト", "ピクシスメガ": "ウェイク",
+  "ピクシスバン": "ハイゼットカーゴ", "サンバーバン": "ハイゼットカーゴ", "ピクシストラック": "ハイゼットトラック", "サンバートラック": "ハイゼットトラック",
+  "シフォン": "タント", "ステラ": "ムーヴ", "トール": "ルーミー", "ジャスティ": "ルーミー", "タンク": "ルーミー", "ロッキー": "ライズ",
+  // スズキ製
+  "フレア": "ワゴンR", "フレアワゴン": "スペーシア", "フレアワゴンカスタムスタイル": "スペーシア", "フレアクロスオーバー": "ハスラー", "キャロル": "アルト",
+  "スクラム": "エブリイ", "スクラムバン": "エブリイ", "クリッパーバン": "エブリイ", "ミニキャブバン": "エブリイ", "ミニキャブ": "エブリイ",
+  "スクラムワゴン": "エブリイワゴン", "クリッパーリオ": "エブリイワゴン", "タウンボックス": "エブリイワゴン",
+  "スクラムトラック": "キャリイ", "クリッパートラック": "キャリイ", "ミニキャブトラック": "キャリイ", "キャリイトラック": "キャリイ",
+  "デリカD:2": "ソリオ", "ランディ": "セレナ",
+  // 日産・三菱の共同開発車
+  "EKワゴン": "デイズ", "EKクロス": "デイズ", "EKスペース": "ルークス", "EKクロススペース": "ルークス", "EKクロスEV": "サクラ",
+  // スバル・トヨタ
+  "BRZ": "GR86",
+};
+export function modelName(name, oem = false) {
   let s = String(name ?? "").normalize("NFKC").split(/[▼■●★☆◇◆※□△▲]/)[0];
   s = s.replace(/[−‐–—_]/g, "-").replace(/ムーブ/g, "ムーヴ").replace(/エブリィ/g, "エブリイ").replace(/アクティー/g, "アクティ")
     .replace(/アウトランダ(?!ー)/g, "アウトランダー").replace(/クラウンクロスオバ/g, "クラウンクロスオーバー").replace(/^NT100\s*クリッパー/, "クリッパートラック").replace(/^NV100\s*/, "")
@@ -193,19 +210,21 @@ export function modelName(name) {
     const t = s.replace(/\s+e$/i, "").trim(); // 「N-VAN e」
     if (t !== s) { s = t; changed = true; }
   }
-  return MODEL_ALIASES[s.replace(/\s/g, "").toUpperCase()] || s;
+  s = MODEL_ALIASES[s.replace(/\s/g, "").toUpperCase()] || s;
+  return oem ? OEM_MAP[s.replace(/\s/g, "").toUpperCase()] || s : s;
 }
 // 同じ車とみなすための鍵（大文字小文字・ハイフン・空白の違いを無視）
-const modelKey = (name) => modelName(name).toUpperCase().replace(/[\s\-‐－]/g, "");
+const modelKey = (name, oem = false) => modelName(name, oem).toUpperCase().replace(/[\s\-‐－]/g, "");
 
 // 月初在庫と販売の車名を、車の種類ごとにまとめて数える
-function groupModels(stockRows, soldRows, tax = "ex") {
+function groupModels(stockRows, soldRows, tax = "ex", oem = false) {
   const groups = new Map();
   const add = (name, field) => {
-    const key = modelKey(name);
+    const key = modelKey(name, oem);
     if (!key) return;
-    const g = groups.get(key) || { key, names: {}, opening: 0, sold: 0, gsum: 0, gn: 0 };
-    const disp = modelName(name);
+    const g = groups.get(key) || { key, names: {}, opening: 0, sold: 0, gsum: 0, gn: 0, oems: new Set() };
+    const own = modelName(name), disp = modelName(name, oem);
+    if (oem && own !== disp) g.oems.add(own); // まとめた OEM 車の名前
     g.names[disp] = (g.names[disp] || 0) + 1;
     g[field]++;
     groups.set(key, g);
@@ -213,12 +232,12 @@ function groupModels(stockRows, soldRows, tax = "ex") {
   stockRows.forEach((r) => add(r.car_name, "opening"));
   soldRows.forEach((r) => {
     add(r.car_name, "sold");
-    const gp = grossOf(r, tax), g = groups.get(modelKey(r.car_name));
+    const gp = grossOf(r, tax), g = groups.get(modelKey(r.car_name, oem));
     if (g && gp != null) { g.gsum += gp; g.gn++; }
   });
   return [...groups.values()].map((g) => ({
     key: g.key,
-    name: Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0], // いちばん多い書き方で表示
+    name: Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0] + (g.oems.size ? `（${[...g.oems].join("・")}を含む）` : ""), // いちばん多い書き方で表示
     opening: g.opening, sold: g.sold,
     rate: g.opening ? g.sold / g.opening : null,
     gross_avg: g.gn ? Math.round(g.gsum / g.gn) : null, gross_total: g.gn ? g.gsum : null,
@@ -231,6 +250,7 @@ export async function handleTurnover(request, env, url) {
   // 月ごとの一覧
   const ch = url.searchParams.get("ch") || "all";
   const tax = url.searchParams.get("tax") === "in" ? "in" : "ex";
+  const oem = url.searchParams.get("oem") === "1"; // OEM 車を元の車種にまとめる
   if (path.startsWith("/api/turnover")) await loadExpense(db);
   // 天気マークの基準（みんなで共通）
   if (path === "/api/settings/weather") {
@@ -341,7 +361,7 @@ export async function handleTurnover(request, env, url) {
     const month = mm[1];
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
     const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
-    const models = groupModels(stock, sold, tax);
+    const models = groupModels(stock, sold, tax, oem);
     models.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.sold - a.sold || a.name.localeCompare(b.name, "ja"));
     return json({ month, opening: stock.length, sold: sold.length, models });
   }
@@ -384,7 +404,7 @@ export async function handleTurnover(request, env, url) {
       const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
       const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
       out.months.push({ month, opening: stock.length, sold: sold.length, rate: stock.length ? sold.length / stock.length : null });
-      for (const g of groupModels(stock, sold, tax)) {
+      for (const g of groupModels(stock, sold, tax, oem)) {
         const m = (out.models[g.key] ||= { name: g.name, points: {} });
         m.points[month] = { opening: g.opening, sold: g.sold, rate: g.rate, gross_avg: g.gross_avg };
       }
@@ -397,7 +417,7 @@ export async function handleTurnover(request, env, url) {
   if (ms && method === "GET") {
     const month = ms[1], key = url.searchParams.get("key") || "";
     const { results } = await db.prepare(`SELECT * FROM sales_items WHERE month = ? ${channelSql(ch)} ORDER BY contract_date, slip_no`).bind(month).all();
-    const list = results.filter((r) => modelKey(r.car_name) === key);
+    const list = results.filter((r) => modelKey(r.car_name, oem) === key);
     const out = [];
     for (const r of list) {
       let inv = null;

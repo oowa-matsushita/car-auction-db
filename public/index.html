@@ -263,6 +263,7 @@
   .wx-red { color: #d32f2f; font-weight: 700; }
   .wx-red span, .wx-red i { font-style: normal; filter: hue-rotate(150deg) saturate(2.5); }
   .tv-min { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 16px; background: #f4f6fa; font-size: 13px; cursor: pointer; }
+  .tv-oem:has(#tvOem:checked) { background: #efe9ff; border-color: #7c5cff; }
   .tv-min:has(#tvMinOn:checked) { background: #e0f4f6; border-color: #10b8c4; }
   .tv-fc { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #fff3e0; color: #c25a00; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: help; }
   #tvModelHead th { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -428,6 +429,7 @@
       <input id="tvModelFilter" placeholder="車名でしぼり込み" style="width:180px">
       <button class="btn btn-sub" id="tvModelClear" style="font-size:12px;padding:4px 10px" title="しぼり込み・並べ替え・選んだ車をはじめの状態に戻します">クリア</button>
       <label class="tv-min" title="チェックを外すと全部の車を表示します"><input type="checkbox" id="tvMinOn" checked> 月初在庫 <input type="number" id="tvMinN" value="5" min="0" step="1" style="width:52px;padding:2px 4px"> 台以上のみ</label>
+      <label class="tv-min tv-oem" title="ピクシスエポック→ミライース、フレアワゴン→スペーシア、eKワゴン→デイズ、BRZ→GR86 など、OEM車を元の車種と合わせて計算します"><input type="checkbox" id="tvOem"> OEMをまとめる</label>
       <span class="tv-note" id="wxLegend" style="margin-left:10px"></span>
       </div>
       <div class="scroll">
