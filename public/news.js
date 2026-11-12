@@ -8,7 +8,9 @@ const NW_FOCUS = [
   ["model", "新型・モデルチェンジ", /新型|フルモデルチェンジ|マイナーチェンジ|モデルチェンジ|一部改良|ビッグマイナー|(発売|発表|登場|デビュー|予約開始|先行公開|世界初公開).*(車|SUV|セダン|ミニバン|軽|EV|ハイブリッド|モデル|グレード|仕様|トラック|ワゴン)|(車|SUV|セダン|ミニバン|軽|EV|ハイブリッド|モデル|トラック|ワゴン).*(発売|発表|登場|デビュー|予約開始|世界初公開)/],
 ];
 const nwText = (it) => String((it.ai_title || "") + " " + it.title + " " + (it.summary || "") + " " + (Array.isArray(it.ai_points) ? it.ai_points.join(" ") : "")).normalize("NFKC");
-const nwFocusOf = (it) => NW_FOCUS.filter(([, , re]) => re.test(nwText(it))).map(([k]) => k);
+// オートバイ・自動運転サービスなど、中古車販売に関係の薄い話題は注目から外す
+const NW_EXCLUDE = /バイク|二輪|スクーター|オートバイ|モーターサイクル|ドゥカティ|アプリリア|ハーレー|トライアンフ|GSX|Ninja|CBR|\d{2,4}cc|ロボタクシー|自動運転タクシー|鉄道|航空|船舶|カーナビ|ドラレコ|タイヤ|チャージャー|カー用品/i;
+const nwFocusOf = (it) => (NW_EXCLUDE.test(nwText(it)) ? [] : NW_FOCUS.filter(([, , re]) => re.test(nwText(it))).map(([k]) => k));
 const nwMatchCat = (it, k) => !k ? true : k === "focus" ? nwFocusOf(it).length > 0 : NW_FOCUS.some(([fk]) => fk === k) ? nwFocusOf(it).includes(k) : it.category === k;
 const nwKey = (s) => String(s || "").normalize("NFKC").toUpperCase().replace(/[\s\-‐－・]/g, "");
 async function loadNews(force) {
