@@ -184,6 +184,7 @@ function drawAnalysis() {
       <div class="an-kpi"><span>売上高（税抜）</span><b>${Math.round(sales / 1e4).toLocaleString()}万円</b><em>車輛本体−値引き</em></div>
     </div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
+    <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🧭 経営アドバイス <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
     <div class="an-grid">
       <div class="an-card"><h3>📅 曜日別（1日あたりの販売台数）</h3>${anBars(dowItems)}</div>
@@ -201,7 +202,74 @@ function drawAnalysis() {
     </div>
     <div class="an-card"><h3>🏆 よく売れた日 TOP10</h3>
       <table class="tv-table an-table"><thead><tr><th>日付</th><th>曜日</th><th>販売</th><th>天気（${h(d.place || "")}）</th><th>普段との差</th></tr></thead><tbody>${topDays.map((x) => `<tr><td>${x.date}</td><td>${AN_DOW[x.dow]}${x.off && x.dow >= 1 && x.dow <= 5 ? "（祝）" : ""}</td><td class="n"><b>${x.sold}</b>台</td><td>${wxTxt(x)}</td><td class="n">${pctS(x.idx - 1)}</td></tr>`).join("")}</tbody></table></div>`;
+  loadTarget();
   $("anInfo").textContent = hasWx ? `天気：${d.place || ""}（気象庁）` : "天気データなし";
 }
 ["anCh", "anSpan", "anOem"].forEach((id) => $(id).addEventListener("change", loadAnalysis));
 if (!$("tab-analysis").hidden) loadAnalysis();
+
+// ---------- 今月の小売台数の目標と、週ごとの目標・進み具合 ----------
+// 日の重み：平日＝1、土日祝＝過去の小売の「土日祝1日÷平日1日」（ratio）。目標をこの重みで日ごとに配る
+let anTg = null;
+async function loadTarget() {
+  try { const r = await fetch("/api/target"); anTg = await r.json(); if (!r.ok) throw 0; } catch { $("anTarget").innerHTML = '<h3>🎯 今月の小売目標</h3><div class="tv-dim">読み込めませんでした</div>'; return; }
+  drawTarget();
+}
+function drawTarget() {
+  const t = anTg, box = $("anTarget");
+  if (!t || !box) return;
+  const wgt = (x) => (x.off ? t.ratio : 1);
+  const totalW = t.days.reduce((s, x) => s + wgt(x), 0);
+  const thr = t.through || "";
+  const doneDays = t.days.filter((x) => thr && x.date <= thr), restDays = t.days.filter((x) => !thr || x.date > thr);
+  const actual = doneDays.reduce((s, x) => s + x.retail, 0);
+  const doneW = doneDays.reduce((s, x) => s + wgt(x), 0), restW = totalW - doneW;
+  const T = t.target;
+  const status = (a, plan) => { if (!plan) return ""; const r = a / plan; return r >= 1.05 ? '<span class="st up">上振れ</span>' : r >= 0.95 ? '<span class="st on">オンピッチ</span>' : '<span class="st dn">下振れ</span>'; };
+  const mlabel = `${Number(t.month.slice(5))}月`;
+  const input = `<span class="tg-in">${mlabel}の小売目標 <input type="number" id="anTgIn" min="0" step="1" value="${T ?? ""}" placeholder="例 400"> 台 <button class="btn btn-ok" id="anTgSave" style="padding:3px 12px">保存</button></span>`;
+  if (T == null) { box.innerHTML = `<h3>🎯 今月の小売目標</h3>${input}<div class="tv-note" style="margin-top:6px">目標を入れると、土日祝の日数（土日祝は平日の${t.ratio}倍売れる計算）に合わせて週ごとの目標を自動で決め、進み具合を出します。</div>`; bindTg(); return; }
+  const planToDate = T * (doneW / totalW);
+  const land = doneW ? Math.round(actual / doneW * totalW) : 0;
+  const need = Math.max(0, T - actual);
+  const perW = restW ? need / restW : 0;
+  // 週ごと（月曜〜日曜。月の初めと終わりは月の中だけ）
+  const weeks = [];
+  for (const x of t.days) { if (!weeks.length || x.dow === 1) weeks.push({ days: [] }); weeks[weeks.length - 1].days.push(x); }
+  const fmtD = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}(${AN_DOW[new Date(d + "T00:00:00Z").getUTCDay()]})`;
+  let cum = 0;
+  const rows = weeks.map((w, i) => {
+    const W = w.days.reduce((s, x) => s + wgt(x), 0), goal = T * W / totalW;
+    const done = w.days.filter((x) => thr && x.date <= thr), dW = done.reduce((s, x) => s + wgt(x), 0);
+    const act = done.reduce((s, x) => s + x.retail, 0), off = w.days.filter((x) => x.off).length;
+    const state = !done.length ? '<span class="st fu">これから</span>' : done.length === w.days.length ? (act >= goal ? '<span class="st up">達成</span>' : '<span class="st dn">未達</span>') : status(act, goal * dW / W) + '<span class="tv-dim" style="font-size:10px">（途中）</span>';
+    cum += goal;
+    return `<tr class="${!done.length ? "fu" : ""}"><td><b>${i + 1}週目</b></td><td style="text-align:left">${fmtD(w.days[0].date)}${w.days.length > 1 ? "〜" + fmtD(w.days[w.days.length - 1].date) : ""}</td>
+      <td class="n">${w.days.length - off}日</td><td class="n">${off}日</td><td class="n"><b>${Math.round(goal)}台</b></td><td class="n">${Math.round(cum)}台</td>
+      <td class="n">${done.length ? act + "台" : "—"}</td><td class="n ${done.length ? (act - goal * dW / W >= 0 ? "plus" : "minus") : ""}">${done.length ? (act - Math.round(goal * dW / W) >= 0 ? "+" : "") + (act - Math.round(goal * dW / W)) + "台" : "—"}</td><td>${state}</td></tr>`;
+  }).join("");
+  const restOff = restDays.filter((x) => x.off).length, restWk = restDays.length - restOff;
+  box.innerHTML = `<h3>🎯 今月の小売目標</h3>${input}
+    <div class="tg-kpis">
+      <div><span>${thr ? fmtD(thr) + "までの実績" : "実績"}</span><b>${actual}台</b><em>目標 ${T}台の ${Math.round(actual / T * 100)}%</em></div>
+      <div><span>今日までの目標</span><b>${Math.round(planToDate)}台</b><em>差 ${actual - Math.round(planToDate) >= 0 ? "+" : ""}${actual - Math.round(planToDate)}台</em></div>
+      <div><span>進み具合</span><b>${status(actual, planToDate) || "—"}</b><em>±5%以内をオンピッチ</em></div>
+      <div><span>このままの着地見込み</span><b>${land}台</b><em>目標まで ${land - T >= 0 ? "+" : ""}${land - T}台</em></div>
+      <div><span>残りで必要</span><b>${need}台</b><em>平日 ${perW.toFixed(1)}台/日・土日祝 ${(perW * t.ratio).toFixed(1)}台/日（残り 平日${restWk}日・土日祝${restOff}日）</em></div>
+    </div>
+    <table class="tv-table tg-table"><thead><tr><th>週</th><th style="text-align:left">期間</th><th>平日</th><th>土日祝</th><th>週の目標</th><th>累計目標</th><th>実績</th><th>目標との差</th><th>状態</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="tv-note" style="margin-top:4px">週の目標＝月の目標を日数で割り振ったもの（平日1日＝1、土日祝1日＝${t.ratio}として計算。過去の小売の実績から）。実績は小売のみ・契約日で数えます。途中の週は、済んだ日の分の目標と比べています。</div>`;
+  bindTg();
+}
+function bindTg() {
+  const b = $("anTgSave");
+  if (!b) return;
+  const save = async () => {
+    const v = Number($("anTgIn").value);
+    if (!(v >= 0) || $("anTgIn").value === "") return alert("目標の台数を入れてください");
+    await fetch("/api/target", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ month: anTg.month, retail: v }) });
+    anTg.target = Math.round(v); drawTarget();
+  };
+  b.onclick = save;
+  $("anTgIn").addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+}

@@ -1,5 +1,5 @@
 import { json } from "./util.js";
-import { channelSql, grossOf, netPrice, loadExpense, groupModels, isOffDay } from "./turnover.js";
+import { channelSql, grossOf, netPrice, loadExpense, groupModels, isOffDay, daysOfMonth } from "./turnover.js";
 
 // ---- 分析（ベータ）：売れている車・売れている日・天気との関係 ---------------------------------
 export const ANALYSIS_SCHEMA = [
@@ -35,6 +35,34 @@ export async function handleAnalysis(request, env, url) {
       .bind(r.date, r.place, r.temp, r.rain, r.wind));
     for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
     return json({ ok: true, count: rows.length, place: rows[0].place, from: rows[0].date, to: rows[rows.length - 1].date });
+  }
+
+  // 今月の小売台数の目標（月ごとに保存。みんなで共通）と、その月の日ごとの小売台数
+  if (path === "/api/target") {
+    const month = /^\d{4}-\d{2}$/.test(url.searchParams.get("month") || "") ? url.searchParams.get("month") : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+    await db.prepare("CREATE TABLE IF NOT EXISTS app_settings ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now','localtime')) )").run();
+    if (method === "PUT") {
+      const b = await request.json().catch(() => ({}));
+      const m = /^\d{4}-\d{2}$/.test(b.month || "") ? b.month : month, t = Number(b.retail);
+      if (!(t >= 0)) return json({ error: "目標の台数を入れてください" }, 400);
+      await db.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')").bind("target:" + m, JSON.stringify({ retail: Math.round(t) })).run();
+      return json({ ok: true });
+    }
+    if (method === "GET") {
+      const r = await db.prepare("SELECT value FROM app_settings WHERE key = ?").bind("target:" + month).first();
+      const target = r ? JSON.parse(r.value).retail : null;
+      const { results } = await db.prepare("SELECT month, contract_date AS d, COUNT(*) AS n FROM sales_items WHERE channel = 'retail' GROUP BY month, contract_date").all();
+      const byDay = {};
+      let through = "";
+      const past = new Set();
+      for (const x of results) { byDay[x.d] = x.n; if (x.month === month) { if (x.d > through) through = x.d; } else if (x.month < month) past.add(x.month); }
+      // 土日祝は平日の何倍売れるか（過去の月の小売から）
+      let oN = 0, oD = 0, wN = 0, wD = 0;
+      for (const pm of past) for (const d of daysOfMonth(pm)) { if (isOffDay(d)) { oN += byDay[d] || 0; oD++; } else { wN += byDay[d] || 0; wD++; } }
+      const ratio = oD && wD && wN ? Math.round(((oN / oD) / (wN / wD)) * 100) / 100 : 1.8;
+      const days = daysOfMonth(month).map((d) => ({ date: d, off: isOffDay(d), dow: new Date(d + "T00:00:00Z").getUTCDay(), retail: byDay[d] || 0 }));
+      return json({ month, target, ratio, through, days });
+    }
   }
 
   if (path !== "/api/analysis" || method !== "GET") return null;
