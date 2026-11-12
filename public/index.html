@@ -66,6 +66,13 @@
   #tvChartBody { flex: 0 0 52%; min-width: 0; position: relative; }
   #tvPanel .sold { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   #tvPanel .sold .scroll { flex: 1; min-height: 0; overflow: auto; }
+  /* 売れた車の一覧：枠に収まるよう小さめに。年式などが出せないときはその列を隠す */
+  #tvCarSoldTable { table-layout: auto; font-size: 12px; }
+  #tvCarSoldTable th, #tvCarSoldTable td { padding: 3px 6px; white-space: nowrap; }
+  #tvCarSoldTable td.car { white-space: normal; max-width: 9em; text-align: left; }
+  #tvCarSoldTable th:nth-child(2) { text-align: left; }
+  #tvCarSoldTable.nolink .lk { display: none; }
+  #tvCarSoldNote { font-size: 11px; }
   #tvPanel .hint { margin: auto; color: #8a93a3; font-size: 13px; }
   #tvModelRows tr.sel td { background: #ffe9a8 !important; }
   /* ---- 確認リスト ---- */
@@ -385,7 +392,7 @@
       <div class="sold">
         <div id="tvCarSoldNote" class="tv-note"></div>
         <div class="scroll">
-          <table class="tv-table" style="min-width:0;width:100%"><thead><tr><th>契約日</th><th>車名</th><th>年式</th><th>距離</th><th>色</th><th>グレード</th><th title="車両本体価格から本体値引を引いた金額（税込）">本体価格（値引後）</th><th>本体原価</th><th title="値引後の本体価格（税抜）− 本体原価 − 経費（設定画面の金額）">台粗利</th></tr></thead>
+          <table class="tv-table" id="tvCarSoldTable" style="min-width:0;width:100%"><thead><tr><th>契約日</th><th>車名</th><th class="lk">年式</th><th class="lk">距離</th><th class="lk">色</th><th class="lk">グレード</th><th title="車両本体価格から本体値引を引いた金額（税込）">本体（値引後）</th><th>原価</th><th title="値引後の本体価格（税抜）− 本体原価 − 経費（設定画面の金額）">台粗利</th></tr></thead>
           <tbody id="tvCarSoldRows"></tbody></table>
         </div>
       </div>

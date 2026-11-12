@@ -490,17 +490,18 @@ async function showCarSold(key) {
   const j = await res.json();
   if (!res.ok) { $("tvCarSoldRows").innerHTML = `<tr><td colspan="9">${h(j.error || "読み込みに失敗しました")}</td></tr>`; return; }
   $("tvCarSoldTitle").textContent += `：${j.rows.length}台`;
-  $("tvCarSoldNote").textContent = j.rows.length && !j.linkable
-    ? "※ 販売データに「在庫No」か「車台番号」の列が無いため、年式・距離・色・グレードは出せません。在庫No入りの販売データCSVを入れ直すと表示されます。"
-    : "年式・距離・色は月初在庫から、グレードは仕入れ台帳（車台番号が一致する車）から表示します。";
+  const linkable = !j.rows.length || j.linkable;
+  $("tvCarSoldTable").classList.toggle("nolink", !linkable);
+  $("tvCarSoldNote").textContent = linkable ? "" : "※ 販売データに在庫No・車台番号が無いため、年式・距離・色・グレードは出せません。";
   const dash = '<span class="tv-dim">—</span>';
+  const man = (v) => (v == null ? dash : (v / 10000).toFixed(1) + "万");
   $("tvCarSoldRows").innerHTML = j.rows.map((r) => `<tr>
-    <td>${h(r.contract_date)}</td><td>${h(r.car_name)}</td><td>${r.year ? h(r.year) : dash}</td>
-    <td class="n">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString()}</td>
-    <td>${r.color ? h(r.color) : dash}</td><td>${r.grade ? h(r.grade) : dash}</td>
-    <td class="n" title="${r.discount ? `車両本体価格 ${yen(r.list_price)} − 値引 ${yen(-r.discount)}` : ""}">${r.price == null ? dash : yen(r.price)}${r.discount ? `<div class="tv-dim" style="font-size:11px">値引 ${yen(-r.discount)}</div>` : ""}</td>
-    <td class="n">${r.cost == null ? dash : yen(r.cost)}</td>
-    <td class="n"><b>${r.gross == null ? dash : yen(r.gross)}</b></td></tr>`).join("") || '<tr><td colspan="9" class="tv-dim">この月に売れた車はありません</td></tr>';
+    <td>${h(String(r.contract_date || "").slice(5).replace("-", "/"))}</td><td class="car">${h(r.car_name)}</td><td class="lk">${r.year ? h(r.year) : dash}</td>
+    <td class="n lk">${r.mileage_km == null ? dash : r.mileage_km.toLocaleString()}</td>
+    <td class="lk">${r.color ? h(r.color) : dash}</td><td class="lk">${r.grade ? h(r.grade) : dash}</td>
+    <td class="n" title="${r.price == null ? "" : `本体価格（値引後・税込）${yen(r.price)}${r.discount ? `＝車両本体価格 ${yen(r.list_price)} − 値引 ${yen(-r.discount)}` : ""}`}">${man(r.price)}${r.discount && Math.abs(r.discount) >= 1000 ? `<div class="tv-dim" style="font-size:10px">値引 ${man(-r.discount)}</div>` : ""}</td>
+    <td class="n" title="${r.cost == null ? "" : yen(r.cost)}">${man(r.cost)}</td>
+    <td class="n" title="${r.gross == null ? "" : yen(r.gross)}"><b>${man(r.gross)}</b></td></tr>`).join("") || '<tr><td colspan="9" class="tv-dim">この月に売れた車はありません</td></tr>';
 }
 $("tvModelRows").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-key]");
