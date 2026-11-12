@@ -185,7 +185,7 @@ function drawAnalysis() {
     </div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
-    ${adv ? `<div class="an-card adv"><h3>🧭 経営アドバイス <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
+    ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
     <div class="an-grid">
       <div class="an-card"><h3>📅 曜日別（1日あたりの販売台数）</h3>${anBars(dowItems)}</div>
       <div class="an-card"><h3>☔ 雨の量と売れ行き <span class="tv-note">（普段＝同じ月・同じ曜日の種類の日と比べた増減）</span></h3>${hasWx ? anBars(rainItems, { fmt: (v) => pctS(v), color: "#3d7be5" }) : '<div class="tv-note">天気のデータがありません</div>'}</div>
