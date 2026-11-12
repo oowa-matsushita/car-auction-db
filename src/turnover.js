@@ -162,10 +162,24 @@ const MODEL_SERIES = [
   { re: /^CX\s*[-ー－‐]?\s*\d/i, name: "CXシリーズ" },
   { re: /^N\s*[-ー－‐]?\s*BOX/i, name: "N-BOX" }, // N-BOX・カスタム・新型・ジョイ・スラッシュなど
 ];
-const MODEL_SUFFIXES = ["新型", "旧型", "カスタム", "ハイブリッド", "スティングレー", "ハイウェイスター", "+スタイル", "PHEV", "PHV", "HV", "EV", "e:", "+"];
+const MODEL_SUFFIXES = ["新型", "旧型", "カスタム", "ハイブリッド", "スティングレー", "ハイウェイスター", "+スタイル", "PHEV", "PHV", "HV", "EV", "e:", "+",
+  // 駆動・ドア数・ボディの記号（台帳の車名に付いていることがある）
+  "4WD", "2WD", "4W", "5D", "4D", "3D", "2D", "5HB", "HB", "OP", "CP",
+  // ステップワゴンのグレード名
+  "スパーダ", "エアー"];
+// 呼び方の違いをそろえる（車名の後ろの記号を外したあとの名前 → まとめる名前）。OEM車（ピクシス・フレアなど）はそのまま
+const MODEL_ALIASES = {
+  DAYZ: "デイズ", ROOX: "ルークス", "デリカD5": "デリカD:5", "アウトバック": "レガシィアウトバック", SW: "ステップワゴン",
+  "フリードプラス": "フリード", "タントファンクロス": "タント", "ノートオーラ": "オーラ",
+  "クリッパー": "クリッパーバン", "クリッパーV": "クリッパーバン", "ハイゼット": "ハイゼットカーゴ", "ハイゼットバン": "ハイゼットカーゴ",
+  "NV200バネットV": "NV200バネットバン", "クリッパリオ": "クリッパーリオ", "エブリイV": "エブリイ", "エブリイバン": "エブリイ", "アトレーV": "アトレー", "アトレーデッキバン": "アトレー",
+};
 export function modelName(name) {
   let s = String(name ?? "").normalize("NFKC").split(/[▼■●★☆◇◆※□△▲]/)[0];
-  s = s.replace(/ムーブ/g, "ムーヴ").replace(/\s+/g, " ").trim();
+  s = s.replace(/[−‐–—_]/g, "-").replace(/ムーブ/g, "ムーヴ").replace(/エブリィ/g, "エブリイ").replace(/アクティー/g, "アクティ")
+    .replace(/アウトランダ(?!ー)/g, "アウトランダー").replace(/クラウンクロスオバ/g, "クラウンクロスオーバー").replace(/^NT100\s*クリッパー/, "クリッパートラック").replace(/^NV100\s*/, "")
+    .replace(/\s+/g, " ").trim();
+  for (let p = true; p;) { const t = s.replace(/\s*[(（][^()（）]*[)）]\s*$/, "").trim(); p = t !== s && t.length > 0; s = t; } // 後ろの（新型）などを外す
   const series = MODEL_SERIES.find((x) => x.re.test(s));
   if (series) return series.name;
   for (let changed = true; changed;) {
@@ -176,8 +190,10 @@ export function modelName(name) {
         changed = true;
       }
     }
+    const t = s.replace(/\s+e$/i, "").trim(); // 「N-VAN e」
+    if (t !== s) { s = t; changed = true; }
   }
-  return s;
+  return MODEL_ALIASES[s.replace(/\s/g, "").toUpperCase()] || s;
 }
 // 同じ車とみなすための鍵（大文字小文字・ハイフン・空白の違いを無視）
 const modelKey = (name) => modelName(name).toUpperCase().replace(/[\s\-‐－]/g, "");
