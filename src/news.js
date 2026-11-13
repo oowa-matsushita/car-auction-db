@@ -120,7 +120,7 @@ export function interestScore(text) {
 }
 
 // ---- AI（Cloudflare Workers AI）で、見出しと中身を短くまとめる ------------------------------
-// おすすめ度の高い記事から順に、まとめていない記事を少しずつまとめる（1日の上限 NEWS_AI_DAILY、既定 80本）
+// おすすめ度の高い記事から順に、まとめていない記事を少しずつまとめる（1日の上限 NEWS_AI_DAILY、既定 300本）
 async function articleText(url) {
   try {
     const res = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; MMS-news/1.0)" } });
@@ -139,7 +139,7 @@ export async function summarizeNews(env, limit = 10) {
   const cnt = await db.prepare("SELECT value FROM app_settings WHERE key = 'news_ai_count'").first();
   let used = 0;
   if (cnt) { const c = JSON.parse(cnt.value); used = c.day === day ? c.n : 0; }
-  const cap = Number(env.NEWS_AI_DAILY) || 80;
+  const cap = Number(env.NEWS_AI_DAILY) || 300;
   const n = Math.min(limit, cap - used);
   if (n <= 0) return 0;
   const { results } = await db.prepare(`SELECT url, title, summary, body FROM news_items WHERE (ai_title IS NULL OR COALESCE(ai_ver,0) < 2) AND COALESCE(ai_tries,0) < 2 AND published_at > ?
