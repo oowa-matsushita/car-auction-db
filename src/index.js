@@ -51,7 +51,7 @@ const CSV_COLS = [
 // ---- ユーティリティ -----------------------------------------------------------
 // 車検満了年月を「R10.05」（R＋2桁の年＋"."＋2桁の月）にそろえる。和暦の印字（R10年05月・10年11月・R09.10 など）だけを直し、
 // 形が合わないもの（平成・西暦・月が無い など）は推測せず空にする
-export function normInspection(v) {
+function normInspection(v) {
   const s = String(v ?? "").normalize("NFKC").replace(/\s+/g, "");
   if (!s) return null;
   const m = s.match(/^(?:R|令和)?0*(\d{1,2})(?:年|\.|\/|-)0*(\d{1,2})月?(?:\d{1,2}日?)?$/i);
