@@ -32,7 +32,7 @@ const TSV_MAP = [
   ["start", "start_price_man"], ["bid", "bid_price_man"], ["plan", "planned_price_man"],
   ["result", "result"], ["member", "member_name"], ["buyer", "buyer"], ["note", "handwritten_note"],
   ["review", "review_reason"], ["inspector", "inspector_note"], ["fuel", "fuel"],
-  ["round", "auction_round"], ["first_reg_month", "first_reg_month"], ["equipment", "equipment"], ["chassis", "chassis_no"],
+  ["round", "auction_round"], ["first_reg_month", "first_reg_month"], ["inspection", "inspection"], ["equipment", "equipment"], ["chassis", "chassis_no"],
 ];
 
 // CSV出力の列
@@ -49,8 +49,20 @@ const CSV_COLS = [
 ];
 
 // ---- ユーティリティ -----------------------------------------------------------
+// 車検満了年月を「R10.05」（R＋2桁の年＋"."＋2桁の月）にそろえる。和暦の印字（R10年05月・10年11月・R09.10 など）だけを直し、
+// 形が合わないもの（平成・西暦・月が無い など）は推測せず空にする
+export function normInspection(v) {
+  const s = String(v ?? "").normalize("NFKC").replace(/\s+/g, "");
+  if (!s) return null;
+  const m = s.match(/^(?:R|令和)?0*(\d{1,2})(?:年|\.|\/|-)0*(\d{1,2})月?(?:\d{1,2}日?)?$/i);
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]);
+  if (!(y >= 1 && y <= 30 && mo >= 1 && mo <= 12)) return null;
+  return `R${String(y).padStart(2, "0")}.${String(mo).padStart(2, "0")}`;
+}
 function normalize(field, v) {
   if (v === undefined || v === null) return null;
+  if (field === "inspection") return normInspection(v);
   if (typeof v === "boolean") return INT_FIELDS.has(field) || REAL_FIELDS.has(field) ? (v ? 1 : 0) : String(v);
   if (typeof v === "string") {
     v = v.trim();
