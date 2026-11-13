@@ -154,6 +154,20 @@
   .nw-chip .n { opacity: .65; margin-left: 4px; }
   .nw-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
   .nw-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+  /* 1記事＝1行の一覧 */
+  .nw-rows { display: flex; flex-direction: column; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(20,35,74,.12); overflow: hidden; }
+  .nw-row { display: grid; grid-template-columns: 78px 150px minmax(0, 1fr) 118px; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid #edf0f5; border-left: 4px solid var(--c, #13234a); text-decoration: none; color: inherit; font-size: 13px; }
+  .nw-row:last-child { border-bottom: 0; } .nw-row:hover { background: #f4f8ff; } .nw-row.hot { background: #fffaf2; }
+  .nw-row .when { font-size: 11px; color: #667; white-space: nowrap; } .nw-row .new { color: #fff; background: #e53935; border-radius: 4px; padding: 0 4px; margin-right: 4px; font-size: 10px; }
+  .nw-row .tg { display: flex; gap: 4px; flex-wrap: wrap; font-size: 10px; }
+  .nw-row .cat { border: 1px solid #ccd4e0; border-radius: 4px; padding: 0 5px; color: #556; } .nw-row .fcs { color: #fff; background: #f26b1d; border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .nw-row .hot-b { color: #fff; background: #d84315; border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .nw-row .ti { min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
+  .nw-row .ti b { color: #13234a; font-size: 14px; flex: none; max-width: 52%; overflow: hidden; text-overflow: ellipsis; } .nw-row .ti b.wait { color: #556; font-weight: 600; }
+  .nw-row .ti .pt { color: #667; font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; } .nw-row .ti .pt.wait { color: #a0a8b6; }
+  .nw-row .ti .stk { flex: none; font-size: 10px; font-weight: 700; color: #8a4b00; background: #fff1d6; border: 1px solid #f3c27a; border-radius: 9px; padding: 0 7px; }
+  .nw-row .sr { text-align: right; } .nw-row .src { color: #fff; border-radius: 4px; padding: 1px 7px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+  @media (max-width: 900px) { .nw-row { grid-template-columns: 1fr; gap: 3px; } .nw-row .ti { flex-wrap: wrap; white-space: normal; } .nw-row .ti b { max-width: 100%; } .nw-row .sr { text-align: left; } }
   .nw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   .nw-card { display: flex; flex-direction: column; background: #fff; border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit; box-shadow: 0 1px 3px rgba(20,35,74,.12); transition: transform .12s, box-shadow .12s; border-top: 4px solid var(--c, #13234a); }
   .nw-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(20,35,74,.18); }

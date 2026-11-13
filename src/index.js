@@ -361,7 +361,7 @@ export default {
     // 毎時：自動車ニュースを取り直す ／ 毎日 0:05：待たせていたページを読み取りに回す
     if (event.cron === "5 15 * * *") await releaseWaiting(env);
     await refreshNews(env).catch(() => {});
-    await summarizeNews(env, 15).catch(() => {});
+    await summarizeNews(env, 25).catch(() => {});
   },
 
   async queue(batch, env) {

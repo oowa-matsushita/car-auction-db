@@ -9,6 +9,7 @@ export const NEWS_SCHEMA = [
   "ALTER TABLE news_items ADD COLUMN ai_title TEXT",
   "ALTER TABLE news_items ADD COLUMN ai_points TEXT",
   "ALTER TABLE news_items ADD COLUMN ai_tries INTEGER DEFAULT 0",
+  "ALTER TABLE news_items ADD COLUMN ai_ver INTEGER DEFAULT 0",
   "CREATE INDEX IF NOT EXISTS idx_news_pub ON news_items(published_at)",
   "CREATE TABLE IF NOT EXISTS app_settings ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
 ];
@@ -141,14 +142,15 @@ export async function summarizeNews(env, limit = 10) {
   const cap = Number(env.NEWS_AI_DAILY) || 80;
   const n = Math.min(limit, cap - used);
   if (n <= 0) return 0;
-  const { results } = await db.prepare(`SELECT url, title, summary, body FROM news_items WHERE ai_title IS NULL AND COALESCE(ai_tries,0) < 2 AND published_at > ?
-    ORDER BY score DESC, published_at DESC LIMIT ?`).bind(new Date(Date.now() - 4 * 864e5).toISOString(), n).all();
+  const { results } = await db.prepare(`SELECT url, title, summary, body FROM news_items WHERE (ai_title IS NULL OR COALESCE(ai_ver,0) < 2) AND COALESCE(ai_tries,0) < 2 AND published_at > ?
+    ORDER BY (CASE WHEN title LIKE '%生産%' OR title LIKE '%受注%' OR title LIKE '%オークション%' OR title LIKE '%相場%' OR title LIKE '%新型%' OR title LIKE '%モデルチェンジ%' OR title LIKE '%改良%' THEN 1 ELSE 0 END) DESC, score DESC, published_at DESC LIMIT ?`).bind(new Date(Date.now() - 4 * 864e5).toISOString(), n).all();
   let done = 0;
   for (const it of results) {
     let text = it.body && it.body.length > 120 ? it.body : `${it.summary || ""} ${await articleText(it.url)}`.trim();
     const prompt = `次の自動車ニュースを、中古車販売店の社長が10秒で分かるように日本語でまとめてください。
 必ず次のJSONだけを返してください（説明やコードブロックは不要）：
-{"title":"内容が一目で分かる見出し（25字以内、あおり表現なし）","points":["要点1（40字以内）","要点2（40字以内）","要点3（40字以内、無ければ省略可）"]}
+{"title":"何が起きたかが一目で分かる見出し（30字以内。車種名・メーカー・数字（台数・金額・時期）を入れ、あおり表現・疑問形・「〜とは？」は使わない）","points":["要点1（40字以内）","要点2（40字以内）","要点3（40字以内、無ければ省略可）"]}
+見出しの良い例：「日産、軽の新型EVを来春発売へ 価格は約250万円」「テスラ サイバートラック、2027年に生産終了の報道」「USS 10月の出品台数16％増、成約率は低下」
 
 元の見出し：${it.title}
 本文：${text || "（本文なし。見出しから分かる範囲でまとめる）"}`;
@@ -158,10 +160,10 @@ export async function summarizeNews(env, limit = 10) {
       const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? "");
       const m = raw.match(/\{[\s\S]*\}/);
       const j = m ? JSON.parse(m[0]) : null;
-      if (j && j.title && Array.isArray(j.points)) out = { title: String(j.title).slice(0, 40), points: j.points.map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 3) };
+      if (j && j.title && Array.isArray(j.points)) out = { title: String(j.title).slice(0, 50), points: j.points.map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 3) };
     } catch {}
     if (out) {
-      await db.prepare("UPDATE news_items SET ai_title = ?, ai_points = ? WHERE url = ?").bind(out.title, JSON.stringify(out.points), it.url).run();
+      await db.prepare("UPDATE news_items SET ai_title = ?, ai_points = ?, ai_ver = 2 WHERE url = ?").bind(out.title, JSON.stringify(out.points), it.url).run();
       done++;
     } else await db.prepare("UPDATE news_items SET ai_tries = COALESCE(ai_tries,0) + 1 WHERE url = ?").bind(it.url).run();
     used++;
@@ -182,7 +184,7 @@ export async function handleNews(request, env, url, ctx) {
     fetched = { at: new Date().toISOString(), status };
   }
   // まとめていない記事があれば、裏で少しずつ AI にまとめさせる（画面は待たない）
-  if (ctx?.waitUntil) ctx.waitUntil(summarizeNews(env, 8).catch(() => {}));
+  if (ctx?.waitUntil) ctx.waitUntil(summarizeNews(env, 12).catch(() => {}));
   const { results } = await db.prepare("SELECT url, source, title, summary, image, published_at, category, score, ai_title, ai_points FROM news_items ORDER BY published_at DESC LIMIT 400").all();
   for (const r of results) r.ai_points = r.ai_points ? JSON.parse(r.ai_points) : null;
   return json({ items: results, fetched_at: fetched.at, status: fetched.status, sources: NEWS_FEEDS.map(({ id, name, color }) => ({ id, name, color })), categories: NEWS_CATEGORY_LABELS });
