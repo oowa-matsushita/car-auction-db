@@ -67,7 +67,7 @@ function drawNews() {
     const s = src[it.source] || { name: it.source, color: "#13234a" }, st = stockOf(it);
     const fresh = Date.now() - Date.parse(it.published_at) < 6 * 3600e3;
     const pts = Array.isArray(it.ai_points) && it.ai_points.length ? it.ai_points : null;
-    const tags = nwFocusOf(it).map((k) => `<span class="fcs">${h(NW_FOCUS.find((f) => f[0] === k)[1])}</span>`).join("") || `<span class="cat">${h(nw.categories[it.category] || "その他")}</span>`;
+    const tags = nwFocusOf(it).map((k) => `<span class="fcs ${k}">${h(NW_FOCUS.find((f) => f[0] === k)[1])}</span>`).join("") || `<span class="cat">${h(nw.categories[it.category] || "その他")}</span>`;
     const detail = [pts ? pts.join(" ／ ") : (it.summary && !it.summary.startsWith("出典") ? it.summary : ""), `元の見出し：${it.title}`].filter(Boolean).join("\n");
     return `<a class="nw-row ${hot ? "hot" : ""}" href="${h(it.url)}" target="_blank" rel="noopener noreferrer" style="--c:${s.color}" title="${h(detail)}">
       <span class="when">${fresh ? '<b class="new">NEW</b>' : ""}${ago(it.published_at)}</span>

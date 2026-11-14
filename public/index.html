@@ -177,10 +177,10 @@
   .nw-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .nw-chip { border: 1px solid #ccd4e0; background: #f6f8fb; color: #334; border-radius: 16px; padding: 3px 12px; font-size: 12px; cursor: pointer; user-select: none; }
   .nw-chip.on { background: #13234a; border-color: #13234a; color: #fff; }
-  .nw-chip.focus { border-color: #f26b1d; color: #c25a00; font-weight: 700; } .nw-chip.focus.on { background: #f26b1d; border-color: #f26b1d; color: #fff; }
+  .nw-chip.focus { border-color: #9fb3d6; color: #274b8f; font-weight: 700; background: #f2f6fd; } .nw-chip.focus.on { background: #13234a; border-color: #13234a; color: #fff; }
   .nw-chip.sub { border-style: dashed; }
   .nw-sep { display: inline-block; width: 1px; background: #ccd4e0; margin: 0 4px; }
-  .nw-card .fcs { color: #fff; background: #f26b1d; border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .nw-card .fcs { color: #274b8f; background: #eaf0fb; border-radius: 4px; padding: 0 5px; font-weight: 700; }
   .nw-chip .n { opacity: .65; margin-left: 4px; }
   .nw-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
   .nw-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
@@ -189,11 +189,13 @@
   #nwList > .nw-rows { width: 100%; }
   .nw-rows { display: flex; width: 100%; flex-direction: column; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(20,35,74,.12); overflow: hidden; }
   .nw-row { display: grid; grid-template-columns: 78px 150px minmax(0, 1fr) 118px; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid #edf0f5; border-left: 4px solid var(--c, #13234a); text-decoration: none; color: inherit; font-size: 13px; }
-  .nw-row:last-child { border-bottom: 0; } .nw-row:hover { background: #f4f8ff; } .nw-row.hot { background: #fffaf2; }
+  .nw-row:last-child { border-bottom: 0; } .nw-row:hover { background: #f4f8ff; } .nw-row.hot { background: #fffdf8; }
   .nw-row .when { font-size: 11px; color: #667; white-space: nowrap; } .nw-row .new { color: #fff; background: #e53935; border-radius: 4px; padding: 0 4px; margin-right: 4px; font-size: 10px; }
   .nw-row .tg { display: flex; gap: 4px; flex-wrap: wrap; font-size: 10px; min-width: 0; }
-  .nw-row .cat { border: 1px solid #ccd4e0; border-radius: 4px; padding: 0 5px; color: #556; } .nw-row .fcs { color: #fff; background: #f26b1d; border-radius: 4px; padding: 0 5px; font-weight: 700; }
-  .nw-row .hot-b { color: #fff; background: #d84315; border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .nw-row .cat { border: 1px solid #ccd4e0; border-radius: 4px; padding: 0 5px; color: #556; } .nw-row .fcs { color: #4a5b80; background: #eef1f7; border-radius: 4px; padding: 0 5px; font-weight: 600; white-space: nowrap; }
+  /* 種類ごとに落ち着いた色。いちばん大事な「生産中止・受注停止」と「オークション・相場」だけ少し目立たせる */
+  .nw-row .fcs.stop { color: #a32121; background: #fdeaea; font-weight: 700; } .nw-row .fcs.auction { color: #0b6f78; background: #e2f4f6; font-weight: 700; } .nw-row .fcs.model { color: #4a5b80; background: #eef1f7; }
+  .nw-row .hot-b { color: #8a4b00; background: #fff1d6; border: 1px solid #f3c27a; border-radius: 4px; padding: 0 5px; font-weight: 700; }
   .nw-row .ti { min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
   .nw-row .ti b { color: #13234a; font-size: 14px; flex: none; max-width: 52%; overflow: hidden; text-overflow: ellipsis; } .nw-row .ti b.wait { color: #556; font-weight: 600; }
   .nw-row .ti .pt { color: #667; font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; } .nw-row .ti .pt.wait { color: #a0a8b6; }
