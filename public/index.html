@@ -46,6 +46,27 @@
   /* 上＝グラフと売れた車（高さ固定）、下＝ 左：月ごと＋週ごと ／ 右：車名ごと（縦スクロールは車名ごとの表の中だけ） */
   #tab-turnover > .tv-main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px; overflow: hidden; }
   .tv-main .tv-card { margin-bottom: 0; }
+  /* 窓が狭いときは、表を詰めて「天気」の列まで窓の中に収める */
+  @media (max-width: 1360px) {
+    .tv-left { max-width: 47%; }
+    #tvMonthCard .tv-table th:last-child, #tvMonthCard .tv-table td:last-child { display: none; } /* 回転率の横グラフ */
+    #tvMonthCard .tv-table td, #tvMonthCard .tv-table th { padding: 3px 5px; font-size: 12px; }
+    #tvMonthCard .tv-dim { font-size: 10px !important; }
+    #tvModelCard .tv-table td, #tvModelCard .tv-table th { padding: 3px 5px; font-size: 12px; }
+    #tvModelHead th:first-child { min-width: 70px !important; }
+    #tvModelRows td.mname { max-width: 96px; }
+    #tvModelCard .tv-rate { font-size: 13px; }
+    #tvModelCard .tv-fc { padding: 0 5px; font-size: 11px; margin: 0; }
+    #tvModelCard .tv-wx { font-size: 11px; } #tvModelCard .tv-wx span { font-size: 15px; margin-right: 2px; }
+    #tvModelCard .tv-min { padding: 2px 6px; margin-left: 0; font-size: 12px; }
+    #tvModelCard .tv-min input[type=number] { width: 44px !important; }
+  }
+  @media (max-width: 1100px) {
+    .tv-left { max-width: 44%; }
+    #tvMonthCard .tv-table th:nth-child(2), #tvMonthCard .tv-table td:nth-child(2) { display: none; } /* 月初在庫 */
+    #tvModelCard .tv-table th:nth-child(2), #tvModelCard .tv-table td:nth-child(2) { display: none; } /* 月初在庫 */
+    #tvModelRows td.mname { max-width: 80px; }
+  }
   .tv-left { flex: 0 1 auto; max-width: 54%; min-width: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
   .tv-left > .tv-card { flex: none; }
   #tvMonthCard, #tvWeekCard { padding: 8px 12px; overflow-x: auto; }
