@@ -19,6 +19,11 @@
   .top h1 { margin: 0 8px 0 0; font-size: 17px; letter-spacing: .05em; }
   .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--navy-2); padding: 6px 8px; border-radius: 4px; }
   .filters span { font-size: 11px; color: #c9e6ee; }
+  /* キーワード検索欄：ほかより広く、明るい枠で目立たせる */
+  .filters .kwlab { font-size: 12px; font-weight: 700; color: #fff; margin-left: 4px; }
+  .filters .w-kw { width: 280px; font-size: 14px; font-weight: 600; padding: 6px 10px; border: 2px solid #ffb84d; border-radius: 6px; background: #fffdf6; color: #13234a; box-shadow: 0 0 0 3px rgba(255,184,77,.25); transition: box-shadow .15s, border-color .15s, width .2s; }
+  .filters .w-kw::placeholder { color: #9aa4b8; font-weight: 400; }
+  .filters .w-kw:focus { outline: none; border-color: #f26b1d; box-shadow: 0 0 0 4px rgba(242,107,29,.35); width: 340px; }
   .w-s { width: 80px; }
   .dategrp { display: inline-flex; flex-direction: column; gap: 3px; }
   .period { display: flex; gap: 3px; }
@@ -415,7 +420,7 @@
 <div class="top">
   <div class="filters">
     <span>担当者</span><input id="f_buyer" class="w-s" placeholder="名前">
-    <span>キーワード</span><input id="f_q" class="w-m" placeholder="車名・型式・車台番号">
+    <span class="kwlab">🔍 キーワード</span><input id="f_q" class="w-kw" placeholder="車名・型式・車台番号で検索" autocomplete="off">
     <span>会場</span><input id="f_auction_house" class="w-s" placeholder="USS東京 等">
     <span>年式</span><select id="f_year_from"></select>〜<select id="f_year_to"></select>
     <span>開催日</span>
