@@ -42,7 +42,10 @@ export const REVIEW_KINDS = [
   { key: "missing", label: "情報が欠けている" },
   { key: "handbid", label: "落札金額が手書き" },
   { key: "noplan", label: "予定価格が空欄" },
+  { key: "uncertain", label: "読み取りに自信がない（理由つき）" },
 ];
+// 「要確認」の理由つきの車は、新しい出品票（この日以降）から確認リストに入れる。古いものは数が多いので入れない
+const UNCERTAIN_FROM = "2026-11-01";
 
 // ---- 相場・売値の外れ値 ---------------------------------------------------------------
 // 似た車（同じ車種・ハイブリッド/EVかどうか・年式±1年・距離が近い）の中央値と比べる。
@@ -89,6 +92,10 @@ function issuesOf(r, dupCount, byModel) {
   if (/落札金額は手書き/.test(reason)) out.push(["handbid", "落札金額は手書きの数字から入力"]);
   if (plan == null) out.push(["noplan", /計算式/.test(reason) ? "予定価格が計算式で書かれている" : "予定価格が空欄"]);
   if (byModel) out.push(...outlierIssues(r, byModel));
+  // 読み取りに自信がない・確認してほしいと書いた理由を、そのまま確認の理由として出す
+  if (r.needs_review && reason && (r.auction_date || "") >= UNCERTAIN_FROM && !/予定価格が計算式|落札金額は手書き/.test(reason)) {
+    out.push(["uncertain", "要確認：" + reason.replace(/\s+/g, " ").slice(0, 160)]);
+  }
   return out;
 }
 
