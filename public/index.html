@@ -67,6 +67,15 @@
     #tvModelCard .tv-table th:nth-child(2), #tvModelCard .tv-table td:nth-child(2) { display: none; } /* 月初在庫 */
     #tvModelRows td.mname { max-width: 80px; }
   }
+  @media (max-width: 1060px) { /* さらに狭いときは、月ごと／週ごとの下に車名ごとを縦に並べる */
+    #tab-turnover > .tv-main { flex-direction: column; overflow: auto; }
+    .tv-left { max-width: 100%; flex: none; overflow: visible; }
+    #tab-turnover > .tv-main > #tvModelCard { flex: none; min-height: 420px; }
+    #tvMonthCard .tv-table th:nth-child(2), #tvMonthCard .tv-table td:nth-child(2) { display: table-cell; }
+    #tvModelCard .tv-table th:nth-child(2), #tvModelCard .tv-table td:nth-child(2) { display: table-cell; }
+    #tvModelRows td.mname { max-width: 150px; }
+    #tvModelCard > .scroll { max-height: 60vh; }
+  }
   .tv-left { flex: 0 1 auto; max-width: 54%; min-width: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
   .tv-left > .tv-card { flex: none; }
   #tvMonthCard, #tvWeekCard { padding: 8px 12px; overflow-x: auto; }
