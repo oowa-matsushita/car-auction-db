@@ -71,7 +71,7 @@ function drawNews() {
     const detail = [pts ? pts.join(" ／ ") : (it.summary && !it.summary.startsWith("出典") ? it.summary : ""), `元の見出し：${it.title}`].filter(Boolean).join("\n");
     return `<a class="nw-row ${hot ? "hot" : ""}" href="${h(it.url)}" target="_blank" rel="noopener noreferrer" style="--c:${s.color}" title="${h(detail)}">
       <span class="when">${fresh ? '<b class="new">NEW</b>' : ""}${ago(it.published_at)}</span>
-      <span class="tg">${hot ? '<span class="hot-b">おすすめ</span>' : ""}${tags}</span>
+      <span class="tgs">${hot ? '<span class="hot-b">おすすめ</span>' : ""}${tags}</span>
       <span class="ti"><b class="${it.ai_title ? "ai" : "wait"}">${h(it.ai_title || it.title)}</b>${pts ? `<span class="pt">${h(pts.join(" ／ "))}</span>` : it.ai_title ? "" : '<span class="pt wait">（AIが見出しを作っています）</span>'}${st ? `<span class="stk">📦 在庫：${h(st.name)}</span>` : ""}</span>
       <span class="sr"><span class="src" style="background:${s.color}">${h(s.name)}</span></span></a>`;
   };
