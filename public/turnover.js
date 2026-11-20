@@ -1,6 +1,6 @@
 "use strict";
 // ---------- タブの切り替え（#ledger / #turnover） ----------
-const TABS = ["ledger", "turnover", "review", "news", "analysis"];
+const TABS = ["ledger", "turnover", "review", "position", "news", "analysis"];
 // ベータ機能（ニュースのタブ）。右上の「ベータ」ボタンで ON/OFF（このパソコンに覚える。はじめは OFF）
 const BETA_TABS = ["news", "analysis"];
 const betaOn = () => { try { return localStorage.getItem("mmsBeta") === "1"; } catch { return false; } };
@@ -17,6 +17,7 @@ function showTab(name) {
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
   if (name === "turnover") loadTurnover();
   if (name === "review") loadReview();
+  if (name === "position" && typeof loadPosition === "function") loadPosition();
   if (name === "news" && typeof loadNews === "function") loadNews();
   if (name === "analysis" && typeof loadAnalysis === "function") loadAnalysis();
 }
