@@ -1,3 +1,4 @@
+import { withTrackerTab } from "./trackerTab.js";
 import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
@@ -378,6 +379,19 @@ export default {
     const method = request.method;
 
     try {
+      // 競合落品トラッカー：MMSにログインした人だけ、/tracker/ 以下を別Workerへ中継する
+      if (path === "/tracker") return Response.redirect(new URL("/tracker/", url), 302);
+      if (path.startsWith("/tracker/")) {
+        if (!env.TRACKER || !env.TRACKER_TOKEN) return json({ error: "競合落品トラッカーとの接続が設定されていません" }, 503);
+        const headers = new Headers(request.headers);
+        headers.delete("cookie");
+        headers.delete("authorization");
+        headers.set("x-mms-token", env.TRACKER_TOKEN);
+        const target = new URL(path.slice("/tracker".length) + url.search, "https://carsensor-tracker.internal");
+        const body = method === "GET" || method === "HEAD" ? undefined : request.body;
+        return env.TRACKER.fetch(new Request(target, { method, headers, body }));
+      }
+
       if (path.startsWith("/api/")) await ensureSchema(env.DB);
 
       // 一覧・検索
@@ -627,7 +641,10 @@ export default {
       }
 
       if (path.startsWith("/api/")) return json({ error: "見つかりません" }, 404);
-      return env.ASSETS.fetch(request);
+      const asset = await env.ASSETS.fetch(request);
+      // 画面（index.html）に「🚗 競合落品」タブを差し込む
+      if ((path === "/" || path === "/index.html") && (asset.headers.get("content-type") || "").includes("text/html")) return withTrackerTab(asset);
+      return asset;
     } catch (e) {
       console.error(e);
       return json({ error: japaneseError(e) }, 500);
