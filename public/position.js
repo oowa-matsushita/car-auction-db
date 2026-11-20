@@ -52,8 +52,10 @@ function drawPosition() {
 
   const myY = psAvg(cars.map((c) => c._y)), myP = psAvg(cars.map((c) => c.price));
   const models = psModels(cars, mode === "model" ? minN : 1);
-  const years = cars.map((c) => c._y), x0 = Math.min(...years) - 0.6, x1 = Math.max(...years) + 0.6;
-  const yMax = Math.ceil(Math.max(...cars.map((c) => c.price)) / 1e6) * 1e6;
+  // 軸の範囲は、いま描く点（車種ごと＝平均、1台ずつ＝全部）に合わせる
+  const ptY = mode === "model" ? models.map((m) => m.y) : cars.map((c) => c._y), ptP = mode === "model" ? models.map((m) => m.p) : cars.map((c) => c.price);
+  const x0 = Math.min(...ptY, myY) - 0.7, x1 = Math.max(...ptY, myY) + 0.7;
+  const yMax = Math.ceil(Math.max(...ptP, myP) / 1e6 + 0.3) * 1e6;
   const W = 1000, H = 600, L = 70, R = 20, T = 20, B = 50;
   const X = (v) => L + ((v - x0) / (x1 - x0)) * (W - L - R), Y = (v) => H - B - (v / yMax) * (H - T - B);
   let s = `<svg viewBox="0 0 ${W} ${H}" class="ps-svg" role="img" aria-label="現在庫のポジショニングマップ">`;
@@ -82,7 +84,7 @@ function drawPosition() {
       s += `<circle cx="${X(c._y + jx)}" cy="${Y(c.price)}" r="${on ? 5 : 3.2}" fill="${on ? "#111" : psColor(c.posted)}" fill-opacity="${on ? 0.95 : 0.45}"><title>${h(c.name)} ${h(c.grade || "")}\n${c.year} ・ ${psMan(c.price)} ・ ${h(c.mileage || "")}</title></circle>`;
     });
   }
-  s += `<circle cx="${X(myY)}" cy="${Y(myP)}" r="9" fill="#fff" stroke="#2a3b5c" stroke-width="3"/><text x="${X(myY) + 14}" y="${Y(myP) - 10}" font-size="13" font-weight="800" fill="#2a3b5c" paint-order="stroke" stroke="#fff" stroke-width="4">★ 自社の平均 ${psWa(myY)}年式 ・ ${psMan(myP)}</text></svg>`;
+  s += `<circle cx="${X(myY)}" cy="${Y(myP)}" r="9" fill="#fff" stroke="#2a3b5c" stroke-width="3"/><text x="${X(myY) + (X(myY) > W * 0.6 ? -14 : 14)}" y="${Y(myP) - 12}" text-anchor="${X(myY) > W * 0.6 ? "end" : "start"}" font-size="13" font-weight="800" fill="#2a3b5c" paint-order="stroke" stroke="#fff" stroke-width="4">★ 自社の平均 ${psWa(myY)}年式 ・ ${psMan(myP)}</text></svg>`;
 
   // 右の表
   const sel = models.find((m) => m.key === ps.sel);
