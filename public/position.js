@@ -99,7 +99,7 @@ function drawPosition() {
     for (const m of [...models].sort((a, b) => b.n - a.n)) {
       const r = 6 + 26 * Math.sqrt(m.n / rmax), on = ps.sel === m.key || (!shopMode && hit(m.name)), fill = m.self ? "#2a3b5c" : psColor(m.days);
       s += `<g class="ps-b" data-k="${h(m.key)}"><circle cx="${X(m.y)}" cy="${Y(m.p)}" r="${r}" fill="${fill}" fill-opacity="${on || m.self ? 0.9 : 0.55}" stroke="${on ? "#111" : "#fff"}" stroke-width="${on ? 2.5 : 1.2}"><title>${h(m.name)}\n${m.n}台　平均 ${psWa(m.y)}年式 ・ ${psMan(m.p)}</title></circle>`;
-      if (shopMode || m.n >= Math.max(8, rmax * 0.25) || on) s += `<text x="${X(m.y)}" y="${Y(m.p) - r - 4}" text-anchor="middle" font-size="${m.self ? 14 : 12}" font-weight="${m.self ? 800 : 700}" fill="#1f2d44" paint-order="stroke" stroke="#fff" stroke-width="3">${h(m.self ? "★ 自社" : m.name.length > 13 ? m.name.slice(0, 12) + "…" : m.name)}</text>`;
+      if (shopMode || m.n >= Math.max(8, rmax * 0.25) || on) s += `<text x="${X(m.y)}" y="${Y(m.p) - r - 4}" text-anchor="middle" font-size="${m.self ? 14 : 12}" font-weight="${m.self ? 800 : 700}" fill="#1f2d44" paint-order="stroke" stroke="#fff" stroke-width="3">${h(m.self ? "★ 自社" : m.name.length > 9 ? m.name.slice(0, 8) + "…" : m.name)}</text>`;
       s += "</g>";
     }
   } else {
