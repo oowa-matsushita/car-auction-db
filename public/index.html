@@ -120,7 +120,11 @@
   .ps-wrap { display: flex; gap: 14px; align-items: flex-start; }
   .ps-main { flex: 1 1 640px; min-width: 0; background: #fff; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px #0001; }
   .ps-svg { width: 100%; height: auto; display: block; }
-  .ps-b { cursor: pointer; }
+  .ps-b, .ps-c { cursor: pointer; transition: opacity .12s; }
+  .ps-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .ps-back { font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid #b9c4d6; background: #f4f7fb; border-radius: 16px; cursor: pointer; margin: 2px 10px 4px 4px; }
+  .ps-back:hover { background: #e5edf8; }
+  .ps-ttl { font-weight: 800; font-size: 15px; color: #1f2d5c; }
   .ps-leg { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #4a5a72; padding: 2px 6px 6px; }
   .ps-leg i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
   .ps-side { flex: 0 0 340px; max-width: 100%; }
@@ -499,7 +503,7 @@
   <div class="nw-top">
     <span style="font-size:16px;font-weight:700">🗺 ポジション</span>
     <span style="font-size:12px;color:#c9e6ee">表示</span>
-    <select id="psMode"><option value="model">車種ごと</option><option value="shop">店舗ごと</option><option value="car">1台ずつ</option></select>
+    <select id="psMode"><option value="shop" selected>店舗ごと</option><option value="model">車種ごと</option><option value="car">1台ずつ</option></select>
     <span style="font-size:12px;color:#c9e6ee">○台以上の車種</span>
     <input type="number" id="psMin" value="5" min="1" style="width:56px">
     <input type="search" id="psQ" placeholder="車名（絞り込み・色つけ）" style="width:150px">
