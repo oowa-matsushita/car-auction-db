@@ -185,17 +185,27 @@ function drawAnalysis() {
   };
   const tRow = (m) => `<tr><td>${h(m.name)}</td><td class="n"><b>${m.now}</b>台</td><td class="n">${m.pAvg.toFixed(1)}台</td><td class="n" style="color:${m.diff >= 0 ? "#1f9d45" : "#c62828"};font-weight:700">${m.diff >= 0 ? "+" : ""}${m.diff.toFixed(1)}</td></tr>`;
 
+  // 直近3か月（今月をふくむ）を月ごとに
+  const m3 = [...new Set(days.map((x) => x.date.slice(0, 7)))].sort().slice(-3).reverse();
+  const mk = (mo) => {
+    const dd = days.filter((x) => x.date.startsWith(mo)), n = dd.length, tot = dd.reduce((q, x) => q + x.sold, 0);
+    const gS = dd.reduce((q, x) => q + x.gsum, 0), gN = dd.reduce((q, x) => q + x.gn, 0), sl = dd.reduce((q, x) => q + x.sales, 0);
+    const wk = dd.filter((x) => !x.off), of = dd.filter((x) => x.off);
+    return { mo, n, tot, avg: n ? tot / n : 0, wkA: wk.length ? wk.reduce((q, x) => q + x.sold, 0) / wk.length : null, ofA: of.length ? of.reduce((q, x) => q + x.sold, 0) / of.length : null, g: gN ? gS / gN : null, sl };
+  };
+  const mm = m3.map(mk);
+  const monthKpi = `<table class="tv-table an-mtable"><thead><tr><th></th>${mm.map((x) => `<th>${monthLabel(x.mo)}</th>`).join("")}</tr></thead><tbody>
+    <tr><td>期間</td>${mm.map((x) => `<td class="n">${x.n}日${x.mo === cur ? "（途中）" : ""}</td>`).join("")}</tr>
+    <tr><td>販売台数</td>${mm.map((x) => `<td class="n"><b>${x.tot.toLocaleString()}台</b></td>`).join("")}</tr>
+    <tr><td>1日平均</td>${mm.map((x) => `<td class="n">${x.avg.toFixed(1)}台</td>`).join("")}</tr>
+    <tr><td>平日／土日祝（1日あたり）</td>${mm.map((x) => `<td class="n">${(x.wkA ?? 0).toFixed(1)}／${(x.ofA ?? 0).toFixed(1)}台</td>`).join("")}</tr>
+    <tr><td>平均台粗利<br><small>値引き後・経費を引いた額</small></td>${mm.map((x) => `<td class="n">${man1a(x.g)}</td>`).join("")}</tr>
+    <tr><td>売上高（税抜）<br><small>車輛本体−値引き</small></td>${mm.map((x) => `<td class="n">${Math.round(x.sl / 1e4).toLocaleString()}万円</td>`).join("")}</tr></tbody></table>`;
   if (!an.khLoaded) { an.khLoaded = true; loadKnowhow(); }
   const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
     <div class="an-card kh" id="anKh"><h3>📝 施策メモ（社長のノウハウ）</h3><div class="tv-note">読み込み中…</div></div>
-    <div class="an-kpis">
-      <div class="an-kpi"><span>期間</span><b>${monthLabel(ms[0])}〜${monthLabel(cur)}</b><em>${days.length}日</em></div>
-      <div class="an-kpi"><span>販売台数</span><b>${total.toLocaleString()}台</b><em>1日平均 ${(total / days.length).toFixed(1)}台</em></div>
-      <div class="an-kpi"><span>平日／土日祝</span><b>${(wkAvg ?? 0).toFixed(1)}／${(offAvg ?? 0).toFixed(1)}台</b><em>1日あたり</em></div>
-      <div class="an-kpi"><span>平均台粗利</span><b>${man1a(gn ? gs / gn : null)}</b><em>値引き後・経費を引いた額</em></div>
-      <div class="an-kpi"><span>売上高（税抜）</span><b>${Math.round(sales / 1e4).toLocaleString()}万円</b><em>車輛本体−値引き</em></div>
-    </div>
+    <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
