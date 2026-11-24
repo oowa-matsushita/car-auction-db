@@ -108,7 +108,7 @@ function orderBy(url) {
   const sort = url.searchParams.get("sort");
   const dir = url.searchParams.get("dir") === "asc" ? "ASC" : "DESC";
   if (sort && SORTABLE.has(sort)) return `ORDER BY ${sort} IS NULL, ${sort} ${dir}, id DESC`;
-  return "ORDER BY car_name DESC, grade DESC, color DESC, id DESC";
+  return "ORDER BY auction_date IS NULL, auction_date DESC, control_no ASC, id DESC";
 }
 
 // 車台番号の比べ方：大文字・小文字、ハイフン、空白の違いは同じとみなす
