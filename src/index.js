@@ -1,4 +1,5 @@
 import { withTrackerTab } from "./trackerTab.js";
+import { handleRegister, withRegisterTab } from "./register.js";
 import { splitPages, extractPageJpeg, extractOnePage } from "./pdf.js";
 import { readPage } from "./reader.js";
 import { json, parseDelimited } from "./util.js";
@@ -640,10 +641,15 @@ export default {
         if (res) return res;
       }
 
+      // 登録指示（一等書記官への登録用CSV）
+      if (path.startsWith("/api/register")) {
+        const res = await handleRegister(request, env, url);
+        if (res) return res;
+      }
       if (path.startsWith("/api/")) return json({ error: "見つかりません" }, 404);
       const asset = await env.ASSETS.fetch(request);
       // 画面（index.html）に「🚗 競合落品」タブを差し込む
-      if ((path === "/" || path === "/index.html") && (asset.headers.get("content-type") || "").includes("text/html")) return withTrackerTab(asset);
+      if ((path === "/" || path === "/index.html") && (asset.headers.get("content-type") || "").includes("text/html")) return withRegisterTab(withTrackerTab(asset));
       return asset;
     } catch (e) {
       console.error(e);
