@@ -23,7 +23,7 @@ const VEHICLE_PROPS = {
   displacement_cc: field("integer"),
   fuel: field("string"),
   shift: field("string", "FA, CA, AT, MT, F5 など表記のまま"),
-  mileage_km: field("integer", "走行距離をkmで。'45千km'なら45000"),
+  mileage_km: field("integer", "走行距離をkmで、1の位まで正確に（例: 5,206km → 5206）。詳細欄に正確な数字があればそれを使い、'3千km'のような概数だけのときは概数を入れず空にして確認リストに入れる"),
   inspection: field("string", "車検満了年月。出品票の「走行／車検」欄、または「車検」欄に印字された和暦（例: R10年05月、10年11月）を「R10.05」の形式（R＋2桁の年＋\".\"＋2桁の月）に直す。印字がない・読めない場合は空文字にし、推測しない"),
   color: field("string"),
   color_code: field("string"),
