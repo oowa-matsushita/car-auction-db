@@ -20,6 +20,7 @@ export const NEWS_FEEDS = [
   { id: "kuruma", name: "くるまのニュース", url: "https://kuruma-news.jp/feed", color: "#2e7d32" },
   { id: "bestcar", name: "ベストカーWeb", url: "https://bestcarweb.jp/feed", color: "#ef6c00" },
   { id: "nikkan", name: "日刊自動車新聞", url: "https://www.netdenjd.com/feed", color: "#6a1b9a" },
+  { id: "toyota", name: "トヨタ公式", url: "https://global.toyota/export/jp/allnews_rss.xml", color: "#eb0a1e" },
   { id: "carwatch", name: "Car Watch", url: "https://car.watch.impress.co.jp/data/rss/1.0/car/feed.rdf", color: "#00838f" },
 ];
 
@@ -28,6 +29,7 @@ const KEEP_DAYS = 14;
 
 // 見出しと要約から分類する（上から順に最初に当たったもの）
 const CATEGORIES = [
+  ["supply", "需給（生産・受注）", /生産終了|生産停止|生産中止|生産を終了|生産打ち切り|販売終了|販売を終了|販売停止|販売中止|受注停止|受注終了|受注を停止|受注を終了|受注再開|受注を再開|注文受付|注文の受付|受付停止|受付終了|オーダーストップ|出荷停止|供給停止|供給不足|納期遅延|納期長期化|減産|増産|廃止|廃盤|絶版|ラストモデル|最終モデル|ファイナル/],
   ["used", "中古車・相場", /中古|相場|オークション|買取|下取|残価|リセール|値落ち|販売店|ディーラー/],
   ["recall", "リコール", /リコール|改善対策|不具合|無償修理/],
   ["ev", "EV・電動", /EV|電気自動車|ハイブリッド|PHEV|PHV|充電|電動|e:HEV|燃料電池|水素/],
@@ -111,7 +113,8 @@ const INTEREST = [
   [/オークション|落札|出品台数|成約率/, 5],
   [/中古車|中古/, 4], [/相場|価格動向|値上がり|値下がり|高騰|下落/, 4],
   [/買取|下取|査定|業販|輸出|残価|リセール/, 3],
-  [/新車販売|登録台数|販売台数|受注停止|納期|値上げ|価格改定|生産停止/, 2],
+  [/生産終了|生産停止|生産中止|販売終了|販売停止|受注停止|受注終了|受注再開|注文受付|オーダーストップ|出荷停止|供給停止|減産|廃止|ラストモデル|最終モデル/, 8],
+  [/新車販売|登録台数|販売台数|納期|値上げ|価格改定/, 2],
   [/補助金|税制|関税|決算|倒産|リコール/, 1],
 ];
 export function interestScore(text) {
