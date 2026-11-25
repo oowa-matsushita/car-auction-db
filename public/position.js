@@ -16,6 +16,12 @@ function psKm(s) {
   let m = /([\d.]+)\s*万/.exec(t); if (m) return Number(m[1]) * 10000;
   m = /([\d.]+)/.exec(t); return m ? Number(m[1]) : null;
 }
+// 普通車／軽自動車の判定：排気量が分かれば660cc以下＝軽。分からないとき（EVなど）は車種名で見分ける
+const PS_KEI_RE = /N[-\s]?BOX|N[-\s]?ONE|N[-\s]?VAN|N[-\s]?WGN|タント|ムーヴ|ミラ|アルト|ラパン|ワゴンR|スペーシア|ハスラー|ジムニー|デイズ|ルークス|サクラ|ek|eK|ハイゼット|エブリイ|キャリイ|アトレ|ピクシス|スクラム|タフト|ウェイク|キャスト|ミニキャブ|NV100|クリッパー|ゼスト|ライフ|ステラ|プレオ|サンバー|ディアス|フレアワゴン|フレアクロスオーバー|MRワゴン|スペーシアギア|ココア|モコ|ピノ|ミニカ|アルトラパン|カプチーノ|コペン|S660|ワゴンRスマイル/;
+const psKind = () => ($("psKind") ? $("psKind").value : "all");
+const psOkKind = (kei) => psKind() === "all" || (psKind() === "kei") === !!kei;
+const psIsKeiOwn = (c) => /^\s*(6[0-6]\d|0\.6)\s/.test(c.grade || "") || (!/^\s*\d\.\d\s/.test(c.grade || "") && PS_KEI_RE.test(c.name || c.model || ""));
+const psIsKeiComp = (c) => (c.cc > 0 ? c.cc <= 660 : PS_KEI_RE.test(c.model || ""));
 const psAvg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 async function loadPosition() {
@@ -54,7 +60,7 @@ function psShops(cars, comp, q) {
   const out = [mk("self", "自社", cars.filter((c) => ok(c.name, c.model, c.grade)).map((c) => ({ y: c._y, price: c.price, km: psKm(c.mileage), days: c.posted })), true)];
   const by = new Map();
   for (const c of comp || []) {
-    if (!(c.year > 0) || !(c.total_price > 0) || !ok(c.model, c.grade, c.maker)) continue;
+    if (!(c.year > 0) || !(c.total_price > 0) || !ok(c.model, c.grade, c.maker) || !psOkKind(psIsKeiComp(c))) continue;
     (by.get(c.shop_code) || by.set(c.shop_code, { name: c.shop_name || c.shop_code, list: [] }).get(c.shop_code)).list.push({ y: c.year, price: c.total_price * 1e4, km: c.mileage > 0 ? c.mileage : null, days: c.days });
   }
   for (const [k, g] of by) out.push(mk(k, g.name.replace(/（株）|株式会社/g, "").replace(/　/g, " ").trim(), g.list, false));
@@ -121,7 +127,7 @@ function psModelMatch(own, name) { const a = psNorm(name), b = psNorm(own); retu
 function drawPosition() {
   const d = ps.data, body = $("psBody");
   if (!d || !d.month) { body.innerHTML = '<div class="nw-empty">カーセンサーのデータがまだありません（分析タブから取り込めます）</div>'; $("psInfo").textContent = ""; return; }
-  const cars = d.cars.filter((c) => c.price > 0 && psYear(c.year)).map((c) => ({ ...c, _y: psYear(c.year) }));
+  const cars = d.cars.filter((c) => c.price > 0 && psYear(c.year) && psOkKind(psIsKeiOwn(c))).map((c) => ({ ...c, _y: psYear(c.year) }));
   const mode = $("psMode").value, minN = Math.max(1, Number($("psMin").value) || 1), q = $("psQ").value.trim();
   $("psMin").disabled = mode !== "model";
   if (!cars.length) { body.innerHTML = '<div class="nw-empty">年式と価格のある車がありません</div>'; return; }
@@ -186,7 +192,7 @@ function drawModelDetail(cars, body) {
   const all = psModels(cars, 1), m = all.find((x) => x.key === ps.sel);
   if (!m) { ps.sel = null; return drawPosition(); }
   const own = cars.filter((c) => (c.key || c.name || c.model) === m.key).map((c) => ({ shop: "self", name: "自社", y: c._y, price: c.price, grade: c.grade, km: psKm(c.mileage), days: c.posted }));
-  const comp = (ps.comp || []).filter((c) => c.year > 0 && c.total_price > 0 && psModelMatch(c.model, m.name))
+  const comp = (ps.comp || []).filter((c) => c.year > 0 && c.total_price > 0 && psModelMatch(c.model, m.name) && psOkKind(psIsKeiComp(c)))
     .map((c) => ({ shop: c.shop_code, name: String(c.shop_name || c.shop_code).replace(/（株）|株式会社/g, "").replace(/　/g, " ").trim(), y: c.year, price: c.total_price * 1e4, grade: c.grade, km: c.mileage > 0 ? c.mileage : null, days: c.days }));
   const list = [...own, ...comp];
   const by = new Map();
@@ -218,4 +224,5 @@ function drawModelDetail(cars, body) {
 
 $("psMode").addEventListener("change", () => { ps.sel = null; ps.ssel = null; drawPosition(); });
 $("psMin").addEventListener("change", drawPosition);
+$("psKind").addEventListener("change", () => { ps.sel = null; ps.ssel = null; drawPosition(); });
 $("psQ").addEventListener("input", drawPosition);
