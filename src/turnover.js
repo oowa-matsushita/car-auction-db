@@ -321,7 +321,17 @@ export async function handleTurnover(request, env, url) {
       // 新車の販売データ：ファイル名に「新車」を含む、または new=1。新車は新車どうしで入れ替え（中古車の分は消さない）
       const isNew = url.searchParams.get("new") === "1" || filename.includes("新車") ? 1 : 0;
       const stmts = [];
-      for (const [mo, list] of Object.entries(byMonth)) {
+      for (const [mo, list0] of Object.entries(byMonth)) {
+        let list = list0;
+        if (isNew) {
+          // 新車のファイルの伝票は、すでに中古車の分として入っていても重ならないよう、そちらを消して新車に入れ替える
+          for (const r of list0) if (r.slip_no) stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ? AND slip_no = ? AND COALESCE(is_new, 0) = 0").bind(mo, r.slip_no));
+        } else {
+          // 通常の販売データを取り込み直しても、新車にした伝票は新車のまま（重ねて入れない）
+          const { results: nw } = await db.prepare("SELECT slip_no FROM sales_items WHERE month = ? AND is_new = 1").bind(mo).all();
+          const have = new Set(nw.map((x) => x.slip_no));
+          list = list0.filter((r) => !have.has(r.slip_no));
+        }
         stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ? AND COALESCE(is_new, 0) = ?").bind(mo, isNew));
         for (const r of list) {
           stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost, is_new) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
