@@ -33,5 +33,3 @@ function drawSeiseki() {
     list.map((a) => `<tr><td>${h(a.name)}</td><td><b>${a.n}台</b></td></tr>`).join("")}</tbody><tfoot><tr><td><b>合計</b></td><td><b>${total}台</b></td></tr></tfoot></table></div>`;
 }
 $("sjSpan").addEventListener("change", drawSeiseki);
-// 販売データのCSVを、この画面からも取り込める（回転率と成績の両方が更新される）
-dropZone($("dropSj"), $("inSj"), importInventory);
