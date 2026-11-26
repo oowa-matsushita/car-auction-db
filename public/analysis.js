@@ -208,6 +208,7 @@ function drawAnalysis() {
     <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
+    <div class="an-card tg" id="anPast"><h3>📜 過去の実績（月を選んで見る）</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
     <div class="an-card cs" id="anCs"><h3>🌐 カーセンサーの反響</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-grid">
@@ -240,7 +241,53 @@ let anTg = null;
 async function loadTarget() {
   try { const r = await fetch("/api/target"); anTg = await r.json(); if (!r.ok) throw 0; } catch { $("anTarget").innerHTML = '<h3>🎯 今月の小売目標</h3><div class="tv-dim">読み込めませんでした</div>'; return; }
   drawTarget();
+  loadPast(an.pastMonth);
 }
+// 過去の月の実績：月を選ぶと、その月の目標・小売の実績・週ごとの達成を出す
+async function loadPast(month) {
+  const box = $("anPast"); if (!box) return;
+  if (!an.allMonths) { try { const r = await fetch("/api/turnover"); const j = await r.json(); an.allMonths = (j.months || []).filter((m) => m.sold).map((m) => m.month).sort(); } catch { an.allMonths = (an.data && an.data.months) || []; } }
+  const cur = anTg && anTg.month, past = an.allMonths.filter((m) => m < cur).reverse();
+  if (!past.length) { box.innerHTML = '<h3>📜 過去の実績</h3><div class="tv-dim">過去の月のデータがまだありません</div>'; return; }
+  if (!month || !past.includes(month)) month = past[0];
+  an.pastMonth = month;
+  let t;
+  try { const r = await fetch("/api/target?month=" + month); t = await r.json(); if (!r.ok) throw 0; } catch { box.innerHTML = '<h3>📜 過去の実績</h3><div class="tv-dim">読み込めませんでした</div>'; return; }
+  const wgt = (x) => (x.off ? t.ratio : 1), totalW = t.days.reduce((q, x) => q + wgt(x), 0);
+  const actual = t.days.reduce((q, x) => q + x.retail, 0), T = t.target;
+  const off = t.days.filter((x) => x.off), wk = t.days.filter((x) => !x.off);
+  const avg = (a) => (a.length ? a.reduce((q, x) => q + x.retail, 0) / a.length : 0);
+  const fmtD = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}(${AN_DOW[new Date(d + "T00:00:00Z").getUTCDay()]})`;
+  const weeks = [];
+  for (const x of t.days) { if (!weeks.length || x.dow === 1) weeks.push({ days: [] }); weeks[weeks.length - 1].days.push(x); }
+  const rows = weeks.map((w, i) => {
+    const act = w.days.reduce((q, x) => q + x.retail, 0), W = w.days.reduce((q, x) => q + wgt(x), 0), goal = T == null ? null : T * W / totalW;
+    const d = goal == null ? "" : Math.round(act - goal);
+    return `<tr><td><b>${i + 1}週目</b></td><td style="text-align:left">${fmtD(w.days[0].date)}${w.days.length > 1 ? "〜" + fmtD(w.days[w.days.length - 1].date) : ""}</td><td class="n">${goal == null ? "—" : Math.round(goal) + "台"}</td><td class="n"><b>${act}台</b></td><td class="n ${d === "" ? "" : d >= 0 ? "plus" : "minus"}">${d === "" ? "—" : (d >= 0 ? "+" : "") + d + "台"}</td></tr>`;
+  }).join("");
+  const label = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
+  const pct = T ? Math.round(actual / T * 100) : null;
+  box.innerHTML = `<h3>📜 過去の実績（月を選んで見る）</h3>
+    <div class="tg-in"><select id="anPastSel">${past.map((m) => `<option value="${m}"${m === month ? " selected" : ""}>${label(m)}</option>`).join("")}</select>
+      ${label(month)}の小売目標 <input type="number" id="anPastIn" min="0" step="1" value="${T ?? ""}" placeholder="未設定" style="width:80px"> 台 <button class="btn btn-ok" id="anPastSave" style="padding:3px 12px">保存</button></div>
+    <div class="tg-kpis">
+      <div><span>小売の実績</span><b>${actual}台</b><em>${T ? `目標 ${T}台の ${pct}%` : "目標が未設定"}</em></div>
+      <div><span>結果</span><b>${T ? (pct >= 100 ? '<span class="st up">達成</span>' : pct >= 95 ? '<span class="st on">ほぼ達成</span>' : '<span class="st dn">未達</span>') : "—"}</b><em>${T ? `目標との差 ${actual - T >= 0 ? "+" : ""}${actual - T}台` : "目標を入れると表示"}</em></div>
+      <div><span>1日あたり</span><b>${(actual / t.days.length).toFixed(1)}台</b><em>平日 ${avg(wk).toFixed(1)}台・土日祝 ${avg(off).toFixed(1)}台</em></div>
+      <div><span>日数</span><b>${t.days.length}日</b><em>平日${wk.length}日・土日祝${off.length}日</em></div>
+    </div>
+    <table class="tv-table tg-table"><thead><tr><th>週</th><th style="text-align:left">期間</th><th>週の目標</th><th>実績</th><th>目標との差</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="tv-note" style="margin-top:4px">実績は小売のみ。週の目標は月の目標を、平日1日＝1・土日祝1日＝${t.ratio}の重みで日数に割り振ったものです。</div>`;
+  $("anPastSel").onchange = () => loadPast($("anPastSel").value);
+  const save = async () => {
+    const v = $("anPastIn").value; if (v === "" || !(Number(v) >= 0)) return alert("目標の台数を入れてください");
+    await fetch("/api/target", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ month, retail: Number(v) }) });
+    loadPast(month);
+  };
+  $("anPastSave").onclick = save;
+  $("anPastIn").addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+}
+
 function drawTarget() {
   const t = anTg, box = $("anTarget");
   if (!t || !box) return;
