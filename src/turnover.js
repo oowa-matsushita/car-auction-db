@@ -11,6 +11,7 @@ export const TURNOVER_ADDED_COLUMNS = [
   "ALTER TABLE sales_items ADD COLUMN customer TEXT",
   "ALTER TABLE sales_items ADD COLUMN channel TEXT",
   "ALTER TABLE sales_items ADD COLUMN cost INTEGER",
+  "ALTER TABLE sales_items ADD COLUMN is_new INTEGER DEFAULT 0",
   "ALTER TABLE inv_items ADD COLUMN grade TEXT",
 ];
 
@@ -102,9 +103,11 @@ export function salesChannel(r) {
 // 経費は「設定」画面で決める（万円。はじめは3.5万円）。台粗利（税抜）からそのまま引く
 export const EXPENSE_DEFAULT_MAN = 3.5;
 let expenseYen = EXPENSE_DEFAULT_MAN * 10000;
+let excludeNew = false; // 台粗利から新車を除く（設定）
 export async function loadExpense(db) {
   const r = await db.prepare("SELECT value FROM app_settings WHERE key = 'weather'").first().catch(() => null);
-  const v = r ? Number(JSON.parse(r.value).expense) : NaN;
+  const cfg = r ? JSON.parse(r.value) : {}, v = Number(cfg.expense);
+  excludeNew = cfg.newcar === "exclude";
   expenseYen = Math.round((Number.isFinite(v) && v >= 0 ? v : EXPENSE_DEFAULT_MAN) * 10000);
 }
 const expIn = () => Math.round(expenseYen * 1.1);
@@ -112,7 +115,9 @@ const expIn = () => Math.round(expenseYen * 1.1);
 const NET_SQL = "(price - ABS(COALESCE(discount, 0)))";
 export const netPrice = (r) => (r.price == null ? null : r.price - Math.abs(r.discount || 0));
 export const grossSql = (tax) => (tax === "in" ? `(${NET_SQL} - cost - ${expIn()})` : `(ROUND(${NET_SQL} / 1.1) - cost - ${expenseYen})`);
-export const grossOf = (r, tax) => (r.cost && r.price != null ? (tax === "in" ? netPrice(r) - r.cost - expIn() : Math.round(netPrice(r) / 1.1) - r.cost - expenseYen) : null);
+// 台粗利に数える販売の条件（原価がある販売。「新車を除く」のときは新車も除く）
+export const grossOk = () => (excludeNew ? "cost > 0 AND COALESCE(is_new, 0) = 0" : "cost > 0");
+export const grossOf = (r, tax) => (r.cost && r.price != null && !(excludeNew && r.is_new) ? (tax === "in" ? netPrice(r) - r.cost - expIn() : Math.round(netPrice(r) / 1.1) - r.cost - expenseYen) : null);
 export function channelSql(ch) {
   if (ch === "retail") return "AND COALESCE(channel,'retail') = 'retail'";
   if (ch === "wholesale") return "AND channel = 'wholesale'";
@@ -268,6 +273,7 @@ export async function handleTurnover(request, env, url) {
       if (b.chart && Number(b.chart.rate) > 0 && Number(b.chart.gross) > 0) v.chart = { rate: Number(b.chart.rate), gross: Number(b.chart.gross) };
       // 1台あたりの経費（万円）。台粗利から引く
       // 仕入れ台帳でマウスを当てたときの数字：latest＝最新月、avg3＝直近3か月（今月を除く）の平均
+      if (["include", "exclude"].includes(b.newcar)) v.newcar = b.newcar; // 台粗利に新車を含める／除く
       if (["latest", "avg3", "off"].includes(b.hover)) v.hover = b.hover; // off＝表示しない
       if (b.expense !== undefined && b.expense !== null && Number.isFinite(Number(b.expense)) && Number(b.expense) >= 0) v.expense = Number(b.expense);
       await db.prepare("INSERT INTO app_settings (key, value) VALUES ('weather', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')").bind(JSON.stringify(v)).run();
@@ -283,8 +289,8 @@ export async function handleTurnover(request, env, url) {
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)}) AS sold,
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'retail') AS sold_retail,
         (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month AND channel = 'wholesale') AS sold_wholesale,
-        (SELECT SUM(${grossSql(tax)}) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_total,
-        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND cost > 0) AS gross_n,
+        (SELECT SUM(${grossSql(tax)}) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND ${grossOk()}) AS gross_total,
+        (SELECT COUNT(*) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)} AND ${grossOk()}) AS gross_n,
         -- 売上高（税抜）＝ 車輛本体価格 − 値引き を税抜にした合計（数える販売だけ）
         (SELECT SUM(ROUND(${NET_SQL} / 1.1)) FROM sales_items s WHERE s.month = ms.month ${channelSql(ch)}) AS sales_total
       FROM ms LEFT JOIN inv_months m ON m.month = ms.month
@@ -312,12 +318,14 @@ export async function handleTurnover(request, env, url) {
       const byMonth = {};
       for (const r of recs) (byMonth[r.contract_date.slice(0, 7)] ||= []).push(r);
       const filename = url.searchParams.get("filename") || "";
+      // 新車の販売データ：ファイル名に「新車」を含む、または new=1。新車は新車どうしで入れ替え（中古車の分は消さない）
+      const isNew = url.searchParams.get("new") === "1" || filename.includes("新車") ? 1 : 0;
       const stmts = [];
       for (const [mo, list] of Object.entries(byMonth)) {
-        stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ?").bind(mo));
+        stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ? AND COALESCE(is_new, 0) = ?").bind(mo, isNew));
         for (const r of list) {
-          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost));
+          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost, is_new) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost, isNew));
         }
       }
       for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));
@@ -360,7 +368,7 @@ export async function handleTurnover(request, env, url) {
   if (mm && method === "GET") {
     const month = mm[1];
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-    const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
+    const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost, is_new FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
     const models = groupModels(stock, sold, tax, oem);
     models.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1) || b.sold - a.sold || a.name.localeCompare(b.name, "ja"));
     return json({ month, opening: stock.length, sold: sold.length, models });
@@ -372,7 +380,7 @@ export async function handleTurnover(request, env, url) {
     const month = wk[1];
     const inv = await db.prepare("SELECT item_count FROM inv_months WHERE month = ?").bind(month).first();
     const opening = inv?.item_count || null;
-    const { results } = await db.prepare(`SELECT contract_date AS d, COUNT(*) AS n, SUM(CASE WHEN cost > 0 THEN ${grossSql(tax)} END) AS g, SUM(CASE WHEN cost > 0 THEN 1 ELSE 0 END) AS gn
+    const { results } = await db.prepare(`SELECT contract_date AS d, COUNT(*) AS n, SUM(CASE WHEN ${grossOk()} THEN ${grossSql(tax)} END) AS g, SUM(CASE WHEN ${grossOk()} THEN 1 ELSE 0 END) AS gn
       FROM sales_items s WHERE month = ? ${channelSql(ch)} GROUP BY contract_date`).bind(month).all();
     const byDay = Object.fromEntries(results.map((r) => [r.d, r]));
     const through = results.reduce((x, r) => (r.d && r.d > x ? r.d : x), "");
@@ -402,7 +410,7 @@ export async function handleTurnover(request, env, url) {
     const out = { months: [], models: {} };
     for (const { month } of months) {
       const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(month).all();
-      const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
+      const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost, is_new FROM sales_items WHERE month = ? ${channelSql(ch)}`).bind(month).all();
       out.months.push({ month, opening: stock.length, sold: sold.length, rate: stock.length ? sold.length / stock.length : null });
       for (const g of groupModels(stock, sold, tax, oem)) {
         const m = (out.models[g.key] ||= { name: g.name, points: {} });

@@ -102,7 +102,7 @@ export async function handleAnalysis(request, env, url) {
     if (method === "GET") {
       await loadExpense(db);
       const { results: list } = await db.prepare("SELECT * FROM knowhow ORDER BY start_date DESC, id DESC").all();
-      const { results: sales } = await db.prepare("SELECT contract_date AS d, car_name, price, discount, cost, channel FROM sales_items WHERE COALESCE(channel,'') <> 'exclude'").all();
+      const { results: sales } = await db.prepare("SELECT contract_date AS d, car_name, price, discount, cost, is_new, channel FROM sales_items WHERE COALESCE(channel,'') <> 'exclude'").all();
       const last = sales.reduce((m, r) => (r.d && r.d > m ? r.d : m), "");
       const dayMs = 864e5, toT = (d) => Date.parse(d + "T00:00:00Z"), toD = (t) => new Date(t).toISOString().slice(0, 10);
       for (const k of list) {
@@ -180,7 +180,7 @@ export async function handleAnalysis(request, env, url) {
   if (months) use = use.slice(-months);
   if (!use.length) return json({ days: [], models: [], bands: [], months: [] });
   const ph = use.map(() => "?").join(",");
-  const { results: sales } = await db.prepare(`SELECT contract_date, car_name, price, discount, cost, channel FROM sales_items s WHERE month IN (${ph}) ${channelSql(ch)}`).bind(...use).all();
+  const { results: sales } = await db.prepare(`SELECT contract_date, car_name, price, discount, cost, is_new, channel FROM sales_items s WHERE month IN (${ph}) ${channelSql(ch)}`).bind(...use).all();
   const { results: wx } = await db.prepare(`SELECT date, place, temp, rain, wind FROM weather_daily WHERE date >= ? AND date <= ?`).bind(use[0] + "-01", use[use.length - 1] + "-31").all();
   const wxBy = Object.fromEntries(wx.map((w) => [w.date, w]));
 
@@ -212,7 +212,7 @@ export async function handleAnalysis(request, env, url) {
   const agg = new Map();
   for (const mo of use) {
     const { results: stock } = await db.prepare("SELECT car_name FROM inv_items WHERE month = ?").bind(mo).all();
-    const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost FROM sales_items s WHERE month = ? ${channelSql(ch)}`).bind(mo).all();
+    const { results: sold } = await db.prepare(`SELECT car_name, price, discount, cost, is_new FROM sales_items s WHERE month = ? ${channelSql(ch)}`).bind(mo).all();
     for (const g of groupModels(stock, sold, "ex", oem)) {
       const a = agg.get(g.key) || { key: g.key, name: g.name, opening: 0, opening_months: 0, sold: 0, gsum: 0, gn: 0, by_month: {}, open_by_month: {}, gross_by_month: {} };
       a.name = g.name; a.opening += g.opening; if (g.opening) a.opening_months++;

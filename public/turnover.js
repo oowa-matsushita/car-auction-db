@@ -174,6 +174,8 @@ function openWx() {
         <h3>💰 台粗利の計算</h3>
         <div class="wx-formula">台粗利 ＝ 本体価格（値引後・税抜） − 本体原価 − <span class="hl">経費 ${inp("wxExp", exp, 0.1, 70)} 万円</span></div>
         <div class="tv-note">経費は1台あたり（陸送など）。台粗利からそのまま引きます。</div>
+        <div class="wx-formula" style="margin-top:8px">台粗利に　<label><input type="radio" name="wxNew" value="include" ${c.newcar === "exclude" ? "" : "checked"}> 新車を含める</label>　<label><input type="radio" name="wxNew" value="exclude" ${c.newcar === "exclude" ? "checked" : ""}> 新車を除く</label></div>
+        <div class="tv-note">新車の販売データは、ファイル名に「新車」を入れるか、取り込み画面の「新車データ」にチェックを入れて取り込みます。「新車を除く」にすると、新車は台数・回転率には数えたまま、台粗利の平均からだけ外します。</div>
       </section>
       <section>
         <h3>🌤️ 天気の基準</h3>
@@ -216,7 +218,7 @@ function openWx() {
     $("wxDlg").close(); await loadWx(); loadTurnover();
   };
   $("wxSave").onclick = async () => {
-    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") }, expense: v("wxExp"), hover: document.querySelector('input[name="wxHover"]:checked')?.value || "latest" };
+    const b = { rate: [v("wxR0"), v("wxR1"), v("wxR2")], gross: [v("wxG0"), v("wxG1"), v("wxG2")], levels: [v("wxL0"), v("wxL1"), v("wxL2"), v("wxL3")], chart: { rate: v("wxCR"), gross: v("wxCG") }, expense: v("wxExp"), newcar: document.querySelector('input[name="wxNew"]:checked')?.value || "include", hover: document.querySelector('input[name="wxHover"]:checked')?.value || "latest" };
     const desc = (a) => a.every((x, i) => i === 0 || a[i - 1] > x);
     const err = [...b.rate, ...b.gross, ...b.levels, b.chart.rate, b.chart.gross, b.expense].some((x) => !Number.isFinite(x)) ? "空欄があります"
       : b.expense < 0 ? "経費は 0 以上にしてください"
@@ -227,7 +229,7 @@ function openWx() {
     if (err) { $("wxErr").textContent = "⚠ " + err; return; }
     const res = await fetch("/api/settings/weather", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
     if (!res.ok) { $("wxErr").textContent = "⚠ " + ((await res.json().catch(() => ({}))).error || "保存できませんでした"); return; }
-    const expChanged = b.expense !== (wxCfg.expense ?? EXPENSE_DEFAULT);
+    const expChanged = b.expense !== (wxCfg.expense ?? EXPENSE_DEFAULT) || b.newcar !== (wxCfg.newcar || "include");
     $("wxDlg").close(); await loadWx();
     if (expChanged) { tvHistory = null; loadTurnover(); } // 台粗利を計算し直す
   };
@@ -338,7 +340,7 @@ async function importInventory(files) {
     const month = monthFromName(f.name) || $("invMonth").value || "";
     tvLog(`取り込み中… ${f.name}`);
     try {
-      const res = await fetch(`/api/inventory?month=${month}&filename=${encodeURIComponent(f.name)}`, { method: "POST", body: await readText(f) });
+      const res = await fetch(`/api/inventory?month=${month}&filename=${encodeURIComponent(f.name)}${$("invNew") && $("invNew").checked ? "&new=1" : ""}`, { method: "POST", body: await readText(f) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.status);
       if (j.kind === "sales") {
