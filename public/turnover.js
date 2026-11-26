@@ -28,7 +28,7 @@ $("tvCh").onchange = () => { try { localStorage.setItem("tvCh", tvCh()); } catch
 const yen = (v) => (v == null ? "" : Number(v).toLocaleString() + "円");
 const pct = (r) => (r == null ? "—" : (r * 100).toFixed(1) + "%");
 const monthLabel = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
-const tvLog = (s) => ($("tvLog").textContent = s);
+const tvLog = (s) => { $("tvLog").textContent = s; const sj = $("sjInfo"); if (sj && !$("tab-seiseki").hidden) sj.textContent = s; };
 
 let tvMonth = null, tvModels = [], tvForecast = null, tvSelKey = null, tvAll = [];
 const TV_ALL = "__all__";
@@ -353,6 +353,7 @@ async function importInventory(files) {
     } catch (e) { tvLog(`❌ ${f.name}: ${e.message}`); }
   }
   loadTurnover();
+  if (typeof loadSeiseki === "function" && sj && sj.data) loadSeiseki(); // 成績も新しいデータに更新
 }
 dropZone($("dropInv"), $("inInv"), importInventory);
 
