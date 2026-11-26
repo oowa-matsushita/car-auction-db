@@ -253,6 +253,7 @@ async function loadPast(month) {
   an.pastMonth = month;
   let t;
   try { const r = await fetch("/api/target?month=" + month); t = await r.json(); if (!r.ok) throw 0; } catch { box.innerHTML = '<h3>📜 過去の実績</h3><div class="tv-dim">読み込めませんでした</div>'; return; }
+  if (!document.body.contains(box) || $("anPast") !== box) return;
   const wgt = (x) => (x.off ? t.ratio : 1), totalW = t.days.reduce((q, x) => q + wgt(x), 0);
   const actual = t.days.reduce((q, x) => q + x.retail, 0), T = t.target;
   const off = t.days.filter((x) => x.off), wk = t.days.filter((x) => !x.off);
@@ -278,14 +279,14 @@ async function loadPast(month) {
     </div>
     <table class="tv-table tg-table"><thead><tr><th>週</th><th style="text-align:left">期間</th><th>週の目標</th><th>実績</th><th>目標との差</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="tv-note" style="margin-top:4px">実績は小売のみ。週の目標は月の目標を、平日1日＝1・土日祝1日＝${t.ratio}の重みで日数に割り振ったものです。</div>`;
-  $("anPastSel").onchange = () => loadPast($("anPastSel").value);
+  box.querySelector("#anPastSel").onchange = (e) => loadPast(e.target.value);
   const save = async () => {
-    const v = $("anPastIn").value; if (v === "" || !(Number(v) >= 0)) return alert("目標の台数を入れてください");
+    const v = box.querySelector("#anPastIn").value; if (v === "" || !(Number(v) >= 0)) return alert("目標の台数を入れてください");
     await fetch("/api/target", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ month, retail: Number(v) }) });
     loadPast(month);
   };
-  $("anPastSave").onclick = save;
-  $("anPastIn").addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+  box.querySelector("#anPastSave").onclick = save;
+  box.querySelector("#anPastIn").addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
 }
 
 function drawTarget() {
