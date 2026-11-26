@@ -29,7 +29,8 @@ const pct = (r) => (r == null ? "—" : (r * 100).toFixed(1) + "%");
 const monthLabel = (m) => `${m.slice(0, 4)}年${Number(m.slice(5))}月`;
 const tvLog = (s) => ($("tvLog").textContent = s);
 
-let tvMonth = null, tvModels = [], tvForecast = null, tvSelKey = null;
+let tvMonth = null, tvModels = [], tvForecast = null, tvSelKey = null, tvAll = [];
+const TV_ALL = "__all__";
 // 当月の着地予想（回転率の右に出す）
 const fcTitle = (f) => `${f.through.slice(5).replace("-", "/")}までの販売から予想。残り 平日${f.rest_weekday}日・土日祝${f.rest_off}日（土日祝は平日の${f.ratio}倍売れる計算。過去の販売データから）`;
 const fcHtml = (rate, f) => (rate == null || !f ? '<span class="tv-dim">—</span>' : `<span class="tv-fc" title="${fcTitle(f)}">${pct(rate * f.factor)}</span>`);
@@ -48,6 +49,9 @@ async function loadTurnover() {
   if (seq !== tvLoadSeq) return;
   const months = data.months || [];
   tvForecast = data.forecast || null;
+  // 全体（全部の車）の月ごとの推移。上のグラフ用
+  tvAll = months.map((m) => ({ month: m.month, opening: m.item_count || 0, sold: m.sold || 0, rate: m.rate, gross_avg: m.gross_avg })).sort((a, b) => a.month.localeCompare(b.month));
+  if (!tvSelKey || tvSelKey === TV_ALL) showChart(TV_ALL);
   $("tvEmpty").hidden = months.length > 0;
   // 回転率の横グラフ（目盛りは全部の月で共通。当月は着地予想を薄い色で重ねる）
   const fcRate = (m) => (tvForecast && tvForecast.month === m.month && m.rate != null ? m.rate * tvForecast.factor : null);
@@ -424,6 +428,7 @@ function niceStepAny(range) {
   return 10 * mag;
 }
 function modelPoints(key) {
+  if (key === TV_ALL) { const span = Number($("tvSpan").value) || 0; return span ? tvAll.slice(-span) : tvAll; }
   if (!tvHistory || !tvHistory.models[key]) return [];
   const pts = tvHistory.models[key].points;
   const span = Number($("tvSpan").value) || 0;
@@ -437,6 +442,11 @@ function showChart(key) {
   // 推移データの読み込み前に押しても、読み込み後にグラフを描く（loadHistory から drawPanelChart）
   tvSelKey = key;
   document.querySelectorAll("#tvModelRows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.key === key));
+  if (key === TV_ALL) {
+    $("tvChartTitle").textContent = "全体の回転率と台粗利の推移";
+    $("tvCarSoldTitle").textContent = ""; $("tvCarSoldNote").textContent = ""; $("tvCarSoldRows").innerHTML = "";
+    drawPanelChart(); return;
+  }
   const name = tvHistory?.models[key]?.name || tvModels.find((m) => m.key === key)?.name || key;
   $("tvChartTitle").textContent = `${name} の回転率と台粗利の推移`;
   if (tvHistory) drawPanelChart(); else $("tvChartBody").innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">読み込み中…</div>';
@@ -466,11 +476,13 @@ try { const v = localStorage.getItem("tvSpan"); if (v && [...$("tvSpan").options
 $("tvSpan").onchange = () => { try { localStorage.setItem("tvSpan", $("tvSpan").value); } catch {} drawPanelChart(); };
 addEventListener("resize", () => { if (!$("tab-turnover").hidden) drawPanelChart(); });
 function clearPanel() {
+  if (tvAll.length) { showChart(TV_ALL); return; }
   tvSelKey = null;
   $("tvChartTitle").textContent = "回転率と台粗利の推移";
   $("tvCarSoldTitle").textContent = ""; $("tvCarSoldNote").textContent = ""; $("tvCarSoldRows").innerHTML = "";
   $("tvChartBody").innerHTML = '<div class="hint" style="padding-top:60px;text-align:center">右下の「車名ごとの回転率」で車名を押すと、ここにグラフが出ます</div>';
 }
+$("tvAllBtn").onclick = () => showChart(TV_ALL);
 
 // その車の、選んでいる月に売れた車の一覧
 async function showCarSold(key) {
