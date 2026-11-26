@@ -333,6 +333,8 @@ export async function handleTurnover(request, env, url) {
           const { results: nw } = await db.prepare("SELECT slip_no FROM sales_items WHERE month = ? AND is_new = 1").bind(mo).all();
           const have = new Set(nw.map((x) => x.slip_no));
           list = list0.filter((r) => !have.has(r.slip_no));
+          // 新車にした伝票も、ファイルに担当者があれば担当者だけは更新する
+          for (const r of list0) if (have.has(r.slip_no) && r.staff) stmts.push(db.prepare("UPDATE sales_items SET staff = ? WHERE month = ? AND slip_no = ? AND is_new = 1").bind(r.staff, mo, r.slip_no));
         }
         // 担当者の列が無いファイルで取り込み直しても、すでに入っている担当者は消さない
         if (list.some((r) => r.staff === undefined)) {
