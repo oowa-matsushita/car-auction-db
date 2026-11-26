@@ -46,6 +46,7 @@ export const REVIEW_KINDS = [
 ];
 // 「要確認」の理由つきの車は、新しい出品票（この日以降）から確認リストに入れる。古いものは数が多いので入れない
 const UNCERTAIN_FROM = "2026-11-01";
+const FEE_FROM = "2026-11-23"; // この日以降は、車検日・リサイクル券が空なら確認リストに出す
 
 // ---- 相場・売値の外れ値 ---------------------------------------------------------------
 // 似た車（同じ車種・ハイブリッド/EVかどうか・年式±1年・距離が近い）の中央値と比べる。
@@ -88,6 +89,10 @@ function issuesOf(r, dupCount, byModel) {
   if (!r.control_no) out.push(["missing", "管理番号がない"]);
   if (bid == null) out.push(["missing", "落札金額がない"]);
   if (!r.auction_date) out.push(["missing", "開催日がない"]);
+  if ((r.auction_date || "") >= FEE_FROM) {
+    if (!r.inspection) out.push(["missing", "車検日が不明（空欄）"]);
+    if (r.recycle_fee == null) out.push(["missing", "リサイクル券の金額が不明（空欄）"]);
+  }
   const reason = r.review_reason || "";
   if (/落札金額は手書き/.test(reason)) out.push(["handbid", "落札金額は手書きの数字から入力"]);
   if (plan == null) out.push(["noplan", /計算式/.test(reason) ? "予定価格が計算式で書かれている" : "予定価格が空欄"]);

@@ -16,9 +16,9 @@ const FIELDS = [
   "displacement_cc", "fuel", "shift", "mileage_km", "inspection", "color", "color_code", "score",
   "score_exterior", "score_interior", "equipment", "start_price_man", "bid_price_man",
   "planned_price_man", "result", "handwritten_note", "inspector_note", "needs_review",
-  "review_reason", "buyer", "member_name", "chassis_no",
+  "review_reason", "buyer", "member_name", "chassis_no", "recycle_fee",
 ];
-const INT_FIELDS = new Set(["upload_id", "page_no", "year", "first_reg_month", "displacement_cc", "mileage_km", "needs_review"]);
+const INT_FIELDS = new Set(["upload_id", "page_no", "year", "first_reg_month", "displacement_cc", "mileage_km", "needs_review", "recycle_fee"]);
 const REAL_FIELDS = new Set(["start_price_man", "bid_price_man", "planned_price_man"]);
 // 画面から編集できる項目
 const EDITABLE = FIELDS.filter((f) => !["upload_id", "pdf_key", "page_no"].includes(f));
@@ -34,7 +34,7 @@ const TSV_MAP = [
   ["start", "start_price_man"], ["bid", "bid_price_man"], ["plan", "planned_price_man"],
   ["result", "result"], ["member", "member_name"], ["buyer", "buyer"], ["note", "handwritten_note"],
   ["review", "review_reason"], ["inspector", "inspector_note"], ["fuel", "fuel"],
-  ["round", "auction_round"], ["first_reg_month", "first_reg_month"], ["inspection", "inspection"], ["equipment", "equipment"], ["chassis", "chassis_no"],
+  ["round", "auction_round"], ["first_reg_month", "first_reg_month"], ["inspection", "inspection"], ["recycle", "recycle_fee"], ["equipment", "equipment"], ["chassis", "chassis_no"],
 ];
 
 // CSV出力の列
@@ -42,7 +42,7 @@ const CSV_COLS = [
   ["buyer", "仕入れ担当"], ["auction_date", "開催日"], ["auction_house", "会場"], ["auction_round", "回"],
   ["lot_no", "出品番号"], ["maker", "メーカー"], ["car_name", "車名"], ["grade", "グレード"],
   ["model_code", "型式"], ["chassis_no", "車台番号"], ["year", "年式"], ["first_reg_month", "初度登録月"], ["displacement_cc", "排気量"],
-  ["fuel", "燃料"], ["shift", "シフト"], ["mileage_km", "走行(km)"], ["inspection", "車検"],
+  ["fuel", "燃料"], ["shift", "シフト"], ["mileage_km", "走行(km)"], ["inspection", "車検"], ["recycle_fee", "リサイクル券(円)"],
   ["color", "色"], ["color_code", "カラーNo"], ["score", "評価点"], ["score_exterior", "外装"],
   ["score_interior", "内装"], ["equipment", "装備"], ["start_price_man", "スタート(万円)"],
   ["bid_price_man", "落札金額(万円)"], ["planned_price_man", "予定車両価格(万円)"], ["result", "結果"],
@@ -155,6 +155,7 @@ const SCHEMA = [
 const ADDED_COLUMNS = [
   "ALTER TABLE uploads ADD COLUMN pages_total INTEGER",
   "ALTER TABLE vehicles ADD COLUMN chassis_no TEXT",
+  "ALTER TABLE vehicles ADD COLUMN recycle_fee INTEGER",
   "ALTER TABLE upload_pages ADD COLUMN skipped INTEGER",
 ];
 let schemaReady = null;
