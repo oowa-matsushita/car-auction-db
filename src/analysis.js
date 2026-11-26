@@ -123,6 +123,24 @@ export async function handleAnalysis(request, env, url) {
     }
   }
 
+  // 仕入れ台帳から、月ごと・週ごとの仕入れ台数と台粗利（予定車両価格 − 落札×1.1。台帳の「予定−落札×1.1」と同じ）の平均
+  if (path === "/api/purchases" && method === "GET") {
+    const { results } = await db.prepare("SELECT auction_date AS d, bid_price_man AS bid, planned_price_man AS plan, result FROM vehicles WHERE auction_date IS NOT NULL AND bid_price_man IS NOT NULL").all();
+    const NOT_BOUGHT = new Set(["流れ", "流札", "下見", "商談"]);
+    const mon = (d) => { const t = Date.parse(d + "T00:00:00Z"), w = (new Date(t).getUTCDay() + 6) % 7; return new Date(t - w * 864e5).toISOString().slice(0, 10); };
+    const months = {}, weeks = {};
+    for (const r of results) {
+      if (NOT_BOUGHT.has((r.result || "").trim())) continue;
+      const g = r.plan != null ? r.plan - r.bid * 1.1 : null;
+      for (const [map, key] of [[months, r.d.slice(0, 7)], [weeks, mon(r.d)]]) {
+        const x = (map[key] ||= { key, n: 0, gn: 0, gs: 0, bid: 0 });
+        x.n++; x.bid += r.bid; if (g != null) { x.gn++; x.gs += g; }
+      }
+    }
+    const fin = (m) => Object.values(m).sort((a, b) => a.key.localeCompare(b.key)).map((x) => ({ key: x.key, n: x.n, gross_n: x.gn, gross_avg: x.gn ? x.gs / x.gn : null, bid_avg: x.n ? x.bid / x.n : null }));
+    return json({ months: fin(months), weeks: fin(weeks) });
+  }
+
   // 今月の小売台数の目標（月ごとに保存。みんなで共通）と、その月の日ごとの小売台数
   if (path === "/api/target") {
     const month = /^\d{4}-\d{2}$/.test(url.searchParams.get("month") || "") ? url.searchParams.get("month") : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);

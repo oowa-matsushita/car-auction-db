@@ -205,6 +205,7 @@ function drawAnalysis() {
   const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
     <div class="an-card kh" id="anKh"><h3>📝 施策メモ（社長のノウハウ）</h3><div class="tv-note">読み込み中…</div></div>
+    <div class="an-card an-pur" id="anPur"><h3>📦 仕入れ（仕入れ台帳）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
@@ -228,6 +229,7 @@ function drawAnalysis() {
     <div class="an-card"><h3>🏆 よく売れた日 TOP10</h3>
       <table class="tv-table an-table"><thead><tr><th>日付</th><th>曜日</th><th>販売</th><th>天気（${h(d.place || "")}）</th><th>普段との差</th></tr></thead><tbody>${topDays.map((x) => `<tr><td>${x.date}</td><td>${AN_DOW[x.dow]}${x.off && x.dow >= 1 && x.dow <= 5 ? "（祝）" : ""}</td><td class="n"><b>${x.sold}</b>台</td><td>${wxTxt(x)}</td><td class="n">${pctS(x.idx - 1)}</td></tr>`).join("")}</tbody></table></div>`;
   loadTarget();
+  loadPurchase();
   drawKnowhow();
   if (an.cs === undefined) { an.cs = null; loadCs(); } else drawCs();
   $("anInfo").textContent = hasWx ? `天気：${d.place || ""}（気象庁）` : "天気データなし";
@@ -236,6 +238,43 @@ function drawAnalysis() {
 if (!$("tab-analysis").hidden) loadAnalysis();
 
 // ---------- 今月の小売台数の目標と、週ごとの目標・進み具合 ----------
+// 仕入れの精度確認：仕入れ台帳の月ごと・週ごとの仕入れ台数と、台粗利の平均（予定車両価格 − 落札×1.1）
+const anPurUnit = (() => { try { return localStorage.getItem("anPurUnit") === "week" ? "week" : "month"; } catch { return "month"; } })();
+an.purUnit = anPurUnit;
+async function loadPurchase() {
+  const box = $("anPur"); if (!box) return;
+  if (!an.pur) { try { const r = await fetch("/api/purchases"); an.pur = await r.json(); if (!r.ok) throw 0; } catch { box.innerHTML = '<h3>📦 仕入れ（仕入れ台帳）</h3><div class="tv-dim">読み込めませんでした</div>'; return; } }
+  if (!document.body.contains(box) || $("anPur") !== box) return;
+  const unit = an.purUnit, all = unit === "week" ? an.pur.weeks : an.pur.months, list = all.slice(unit === "week" ? -13 : -12);
+  const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : `${Number(x.key.slice(5))}月`;
+  const W = Math.max(520, list.length * 78), H = 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
+  const maxN = Math.max(...list.map((x) => x.n), 1);
+  const gv = list.map((x) => x.gross_avg).filter((v) => v != null), gMax = Math.max(...gv, 1), gMin = Math.min(0, ...gv);
+  const yN = (v) => T + ih - (v / maxN) * ih, yG = (v) => T + ih - ((v - gMin) / (gMax - gMin || 1)) * ih;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const yy = T + (ih * i) / 4; g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#e1e6ee"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="#0e8d97">${Math.round(maxN * (1 - i / 4))}</text><text x="${W - R + 6}" y="${yy + 4}" font-size="11" fill="#d4691a">${(gMax - ((gMax - gMin) * i) / 4).toFixed(0)}万</text>`; }
+  if (gMin < 0) g += `<line x1="${L}" x2="${W - R}" y1="${yG(0)}" y2="${yG(0)}" stroke="#d4691a" stroke-opacity=".5" stroke-dasharray="4 3"/>`;
+  list.forEach((x, i) => {
+    const cx = L + bw * i + bw / 2, bh = (x.n / maxN) * ih;
+    g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n)}" width="${bw * 0.6}" height="${bh}" rx="3" fill="#10b8c4" fill-opacity=".75"><title>${lab(x)}：仕入れ ${x.n}台／台粗利の平均 ${x.gross_avg == null ? "—" : x.gross_avg.toFixed(1) + "万円"}（${x.gross_n}台で計算）</title></rect>`;
+    g += `<text x="${cx}" y="${yN(x.n) - 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0e8d97">${x.n}</text>`;
+    g += `<text x="${cx}" y="${H - 24}" text-anchor="middle" font-size="11" fill="#334">${lab(x)}</text>`;
+  });
+  const pts = list.map((x, i) => (x.gross_avg == null ? null : [L + bw * i + bw / 2, yG(x.gross_avg), x.gross_avg])).filter(Boolean);
+  if (pts.length) {
+    g += `<polyline points="${pts.map((q) => q[0] + "," + q[1]).join(" ")}" fill="none" stroke="#e8761f" stroke-width="2.5"/>`;
+    pts.forEach((q) => { g += `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#e8761f" stroke="#fff" stroke-width="1.5"/><text x="${q[0]}" y="${q[1] - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="#c25a00" paint-order="stroke" stroke="#fff" stroke-width="3">${q[2].toFixed(1)}万</text>`; });
+  }
+  const tot = list.reduce((q, x) => q + x.n, 0), gAll = list.reduce((q, x) => q + (x.gross_avg == null ? 0 : x.gross_avg * x.gross_n), 0), gN = list.reduce((q, x) => q + x.gross_n, 0);
+  box.innerHTML = `<h3>📦 仕入れ（仕入れ台帳）</h3>
+    <div class="tg-in"><span class="seg"><button class="${unit === "month" ? "on" : ""}" data-u="month">月ごと</button><button class="${unit === "week" ? "on" : ""}" data-u="week">週ごと</button></span>
+      <span class="tv-note">直近${list.length}${unit === "week" ? "週" : "か月"}：仕入れ ${tot}台・台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
+    <div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 520)}px">${g}</svg></div>
+    <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>仕入れ台数（左の目盛り）　<span class="an-key" style="background:#e8761f"></span>台粗利の平均（右の目盛り・万円）<br>
+      仕入れ台数＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点の見込み）。予定価格が空欄の車は、台粗利の平均には入りません。週は月曜〜日曜で、開催日で数えます。</div>`;
+  box.querySelectorAll("[data-u]").forEach((b) => (b.onclick = () => { an.purUnit = b.dataset.u; try { localStorage.setItem("anPurUnit", an.purUnit); } catch {} loadPurchase(); }));
+}
+
 // 日の重み：平日＝1、土日祝＝過去の小売の「土日祝1日÷平日1日」（ratio）。目標をこの重みで日ごとに配る
 let anTg = null;
 async function loadTarget() {
