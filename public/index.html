@@ -175,7 +175,7 @@
   .sj-bar .tr { height: 20px; background: #eef1f6; border-radius: 4px; display: flex; overflow: hidden; }
   .sj-bar .tr i { display: block; height: 100%; } .sj-bar .n { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
   .sj-bar .rk { color: #8a93a3; text-align: right; font-size: 12px; }
-  .sj-tb { width: 100%; border-collapse: collapse; font-size: 13px; } .sj-tb th, .sj-tb td { padding: 5px 8px; border-bottom: 1px solid #edf0f5; text-align: right; white-space: nowrap; } .sj-tb th { background: #e9eef5; } .sj-tb th:first-child, .sj-tb td:first-child, .sj-tb th:nth-child(2), .sj-tb td:nth-child(2) { text-align: left; }
+  .sj-tb { width: 100%; border-collapse: collapse; font-size: 13px; } .sj-tb th, .sj-tb td { padding: 5px 8px; border-bottom: 1px solid #edf0f5; text-align: right; white-space: nowrap; } .sj-tb th { background: #e9eef5; } .sj-tb th:first-child, .sj-tb td:first-child { text-align: left; } .sj-tb tfoot td { border-top: 2px solid #13234a; border-bottom: 0; }
   .sj-cell { position: relative; } .sj-cell i { position: absolute; left: 0; bottom: 0; height: 3px; background: #10b8c4; border-radius: 2px; } .sj-cell.lo i { background: #c9d1dd; }
   .tg-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 10px 0; }
   .tg-kpis > div { background: #fff; border-radius: 8px; padding: 8px 12px; box-shadow: 0 1px 2px rgba(20,35,74,.08); display: flex; flex-direction: column; }
@@ -446,11 +446,11 @@
   <span class="logo">MMS</span>
   <button data-tab="ledger">📋 仕入れ台帳</button>
   <button data-tab="turnover">🔄 回転率</button>
-  <button data-tab="seiseki">🏅 成績</button>
   <button data-tab="review">✅ 確認リスト <span id="rvBadge" class="rv-badge"></span></button>
   <button data-tab="position">🗺 ポジション</button>
   <button data-tab="news">📰 ニュース <span class="beta-tag">β</span></button>
   <button data-tab="analysis">📊 分析 <span class="beta-tag">β</span></button>
+  <button data-tab="seiseki">🏅 成績</button>
   <button type="button" id="wxBtn" class="set-btn" title="設定（台粗利の経費・天気の基準・グラフの上限・マウスを当てたときの数字）">⚙ 設定</button>
   <a href="/logout" class="logout" title="ログアウト（次に開くときはIDとパスワードが必要です）">ログアウト</a>
 </nav>
@@ -512,8 +512,6 @@
     <span style="font-size:16px;font-weight:700">🏅 成績</span>
     <span style="font-size:12px;color:#c9e6ee">期間</span>
     <select id="sjSpan"></select>
-    <span style="font-size:12px;color:#c9e6ee">数える販売</span>
-    <select id="sjCh"><option value="all">小売＋業販</option><option value="retail">小売のみ</option><option value="wholesale">業販のみ</option></select>
     <span style="flex:1"></span><span id="sjInfo" style="font-size:12px;color:#c9e6ee"></span>
   </div>
   <div class="nw-body" id="sjBody"></div>
