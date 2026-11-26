@@ -124,14 +124,22 @@ export async function handleAnalysis(request, env, url) {
   }
 
   // 成績：担当者ごとの販売台数（月ごと）。小売・業販の別、平均台粗利、売上高つき
-  if (path === "/api/performance" && method === "GET") {
+  if ((path === "/api/performance" || path === "/api/performance/cars") && method === "GET") {
     await loadExpense(db);
     const ch = url.searchParams.get("ch") || "all";
-    const { results } = await db.prepare(`SELECT month, staff, channel, price, discount, cost, is_new FROM sales_items s WHERE staff IS NOT NULL AND staff <> '' ${channelSql(ch)}`).all();
+    const { results } = await db.prepare(`SELECT month, staff, channel, contract_date, car_name, price, discount, cost, is_new FROM sales_items s WHERE staff IS NOT NULL AND staff <> '' ${channelSql(ch)}`).all();
     // 名前をそろえる：「業販）」を外し、空白を除いて同じ人にまとめる。「石神」のような短い呼び方は、同じ読みで始まる1人だけの名前にまとめる
     const norm = (s) => String(s).normalize("NFKC").replace(/^業販[)）]/, "").replace(/\s+/g, "");
     const keys = [...new Set(results.map((r) => norm(r.staff)))];
     const full = (k) => { const c = keys.filter((x) => x !== k && x.startsWith(k)); return c.length === 1 ? c[0] : k; };
+    // 担当者を押したときの、販売した車の一覧
+    if (path === "/api/performance/cars") {
+      const who = url.searchParams.get("staff") || "", mons = (url.searchParams.get("months") || "").split(",").filter(Boolean);
+      const list = results.filter((r) => full(norm(r.staff)) === who && mons.includes(r.month))
+        .sort((x, y) => String(y.contract_date).localeCompare(String(x.contract_date)))
+        .map((r) => ({ date: r.contract_date, car: r.car_name, channel: r.channel, price: netPrice(r), gross: grossOf(r, "ex"), is_new: r.is_new ? 1 : 0 }));
+      return json({ cars: list });
+    }
     const disp = new Map();
     for (const r of results) { const raw = String(r.staff).normalize("NFKC").replace(/^業販[)）]/, "").trim(), k = full(norm(r.staff)); if (!disp.has(k) || (/ /.test(raw) && !/ /.test(disp.get(k)))) disp.set(k, raw); }
     const acc = new Map();

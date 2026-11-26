@@ -619,7 +619,7 @@ export default {
       }
 
       // 分析（ベータ）・天気データ
-      if (path === "/api/analysis" || path === "/api/weather" || path === "/api/target" || path === "/api/purchases" || path === "/api/performance" || path.startsWith("/api/knowhow") || path === "/api/carsensor") {
+      if (path === "/api/analysis" || path === "/api/weather" || path === "/api/target" || path === "/api/purchases" || path.startsWith("/api/performance") || path.startsWith("/api/knowhow") || path === "/api/carsensor") {
         const res = await handleAnalysis(request, env, url);
         if (res) return res;
       }
