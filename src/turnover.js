@@ -12,6 +12,7 @@ export const TURNOVER_ADDED_COLUMNS = [
   "ALTER TABLE sales_items ADD COLUMN channel TEXT",
   "ALTER TABLE sales_items ADD COLUMN cost INTEGER",
   "ALTER TABLE sales_items ADD COLUMN is_new INTEGER DEFAULT 0",
+  "ALTER TABLE sales_items ADD COLUMN staff TEXT",
   "ALTER TABLE inv_items ADD COLUMN grade TEXT",
 ];
 
@@ -75,6 +76,7 @@ const SALES_FIELDS = {
   price: ["車両本体価格", "車輛本体価格", "本体価格"],
   customer: ["顧客名"],
   fees: ["販売諸費用計"],
+  staff: ["担当者名", "担当者", "営業担当"],
   cost: ["本体価格原価", "車輌本体原価", "車両本体原価"],
   discount: ["車両本体値引", "本体値引", "値引"],
   sales_amount: ["売上高"],
@@ -149,7 +151,7 @@ function parseSales(rows) {
       slip_no: clean(get("slip_no")), contract_date: toDate(get("contract_date")), delivery_date: toDate(get("delivery_date")),
       car_name: clean(get("car_name")), price: toInt(get("price")), discount: toInt(get("discount")), sales_amount: toInt(get("sales_amount")),
       stock_no: clean(get("stock_no")), chassis_no: clean(get("chassis_no")),
-      customer: clean(get("customer")), fees: pos.fees ? toInt(get("fees")) : null,
+      customer: clean(get("customer")), fees: pos.fees ? toInt(get("fees")) : null, staff: pos.staff ? clean(get("staff")) || null : undefined,
       cost: pos.cost ? toInt(get("cost")) || null : null,
     });
   }
@@ -332,10 +334,16 @@ export async function handleTurnover(request, env, url) {
           const have = new Set(nw.map((x) => x.slip_no));
           list = list0.filter((r) => !have.has(r.slip_no));
         }
+        // 担当者の列が無いファイルで取り込み直しても、すでに入っている担当者は消さない
+        if (list.some((r) => r.staff === undefined)) {
+          const { results: sf } = await db.prepare("SELECT slip_no, staff FROM sales_items WHERE month = ? AND staff IS NOT NULL").bind(mo).all();
+          const sm = new Map(sf.map((x) => [x.slip_no, x.staff]));
+          for (const r of list) if (r.staff === undefined) r.staff = sm.get(r.slip_no) || null;
+        }
         stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ? AND COALESCE(is_new, 0) = ?").bind(mo, isNew));
         for (const r of list) {
-          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost, is_new) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost, isNew));
+          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost, is_new, staff) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost, isNew, r.staff ?? null));
         }
       }
       for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));

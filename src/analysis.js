@@ -123,6 +123,31 @@ export async function handleAnalysis(request, env, url) {
     }
   }
 
+  // 成績：担当者ごとの販売台数（月ごと）。小売・業販の別、平均台粗利、売上高つき
+  if (path === "/api/performance" && method === "GET") {
+    await loadExpense(db);
+    const ch = url.searchParams.get("ch") || "all";
+    const { results } = await db.prepare(`SELECT month, staff, channel, price, discount, cost, is_new FROM sales_items s WHERE staff IS NOT NULL AND staff <> '' ${channelSql(ch)}`).all();
+    // 名前をそろえる：「業販）」を外し、空白を除いて同じ人にまとめる。「石神」のような短い呼び方は、同じ読みで始まる1人だけの名前にまとめる
+    const norm = (s) => String(s).normalize("NFKC").replace(/^業販[)）]/, "").replace(/\s+/g, "");
+    const keys = [...new Set(results.map((r) => norm(r.staff)))];
+    const full = (k) => { const c = keys.filter((x) => x !== k && x.startsWith(k)); return c.length === 1 ? c[0] : k; };
+    const disp = new Map();
+    for (const r of results) { const raw = String(r.staff).normalize("NFKC").replace(/^業販[)）]/, "").trim(), k = full(norm(r.staff)); if (!disp.has(k) || (/ /.test(raw) && !/ /.test(disp.get(k)))) disp.set(k, raw); }
+    const acc = new Map();
+    for (const r of results) {
+      const k = full(norm(r.staff)), id = r.month + "|" + k;
+      const a = acc.get(id) || { month: r.month, staff: k, n: 0, retail: 0, wholesale: 0, gsum: 0, gn: 0, sales: 0 };
+      a.n++; if (r.channel === "wholesale") a.wholesale++; else a.retail++;
+      const g = grossOf(r, "ex"); if (g != null) { a.gsum += g; a.gn++; }
+      const np = netPrice(r); if (np != null) a.sales += Math.round(np / 1.1);
+      acc.set(id, a);
+    }
+    const rows = [...acc.values()].map((a) => ({ ...a, name: disp.get(a.staff) || a.staff }));
+    const months = [...new Set(rows.map((r) => r.month))].sort().reverse();
+    return json({ months, rows });
+  }
+
   // 仕入れ台帳から、月ごと・週ごとの仕入れ台数と台粗利（予定車両価格 − 落札×1.1。台帳の「予定−落札×1.1」と同じ）の平均
   if (path === "/api/purchases" && method === "GET") {
     const { results } = await db.prepare("SELECT auction_date AS d, bid_price_man AS bid, planned_price_man AS plan, result FROM vehicles WHERE auction_date IS NOT NULL AND bid_price_man IS NOT NULL").all();

@@ -165,6 +165,18 @@
   #selStat b { font-size: 15px; font-variant-numeric: tabular-nums; } #selStat span { color: #5a6b8c; font-size: 12px; } #selStat .x { margin-left: auto; cursor: pointer; border: 0; background: none; font-size: 16px; color: #5a6b8c; }
   #grid td.cs { background: #cfe3ff !important; box-shadow: inset 0 0 0 1px #3a78d8; }
   #grid.dragging { user-select: none; }
+  #tab-seiseki { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #eef1f6; }
+  .sj-card { background: #fff; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(20,35,74,.1); }
+  .sj-card h3 { margin: 0 0 8px; font-size: 15px; color: #13234a; }
+  .sj-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .sj-kpis > div { background: #fff; border-radius: 10px; padding: 10px 14px; box-shadow: 0 1px 3px rgba(20,35,74,.1); display: flex; flex-direction: column; }
+  .sj-kpis span { font-size: 11px; color: #667; } .sj-kpis b { font-size: 22px; color: #13234a; } .sj-kpis em { font-style: normal; font-size: 11px; color: #8a93a3; }
+  .sj-bar { display: grid; grid-template-columns: 28px 120px 1fr 56px; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+  .sj-bar .tr { height: 20px; background: #eef1f6; border-radius: 4px; display: flex; overflow: hidden; }
+  .sj-bar .tr i { display: block; height: 100%; } .sj-bar .n { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sj-bar .rk { color: #8a93a3; text-align: right; font-size: 12px; }
+  .sj-tb { width: 100%; border-collapse: collapse; font-size: 13px; } .sj-tb th, .sj-tb td { padding: 5px 8px; border-bottom: 1px solid #edf0f5; text-align: right; white-space: nowrap; } .sj-tb th { background: #e9eef5; } .sj-tb th:first-child, .sj-tb td:first-child, .sj-tb th:nth-child(2), .sj-tb td:nth-child(2) { text-align: left; }
+  .sj-cell { position: relative; } .sj-cell i { position: absolute; left: 0; bottom: 0; height: 3px; background: #10b8c4; border-radius: 2px; } .sj-cell.lo i { background: #c9d1dd; }
   .tg-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 10px 0; }
   .tg-kpis > div { background: #fff; border-radius: 8px; padding: 8px 12px; box-shadow: 0 1px 2px rgba(20,35,74,.08); display: flex; flex-direction: column; }
   .tg-kpis span { font-size: 11px; color: #667; } .tg-kpis b { font-size: 20px; color: #13234a; } .tg-kpis em { font-style: normal; font-size: 11px; color: #8a93a3; }
@@ -434,6 +446,7 @@
   <span class="logo">MMS</span>
   <button data-tab="ledger">📋 仕入れ台帳</button>
   <button data-tab="turnover">🔄 回転率</button>
+  <button data-tab="seiseki">🏅 成績</button>
   <button data-tab="review">✅ 確認リスト <span id="rvBadge" class="rv-badge"></span></button>
   <button data-tab="position">🗺 ポジション</button>
   <button data-tab="news">📰 ニュース <span class="beta-tag">β</span></button>
@@ -494,6 +507,17 @@
 </div>
 </section>
 
+<section class="tab" id="tab-seiseki" hidden>
+  <div class="nw-top">
+    <span style="font-size:16px;font-weight:700">🏅 成績</span>
+    <span style="font-size:12px;color:#c9e6ee">期間</span>
+    <select id="sjSpan"></select>
+    <span style="font-size:12px;color:#c9e6ee">数える販売</span>
+    <select id="sjCh"><option value="all">小売＋業販</option><option value="retail">小売のみ</option><option value="wholesale">業販のみ</option></select>
+    <span style="flex:1"></span><span id="sjInfo" style="font-size:12px;color:#c9e6ee"></span>
+  </div>
+  <div class="nw-body" id="sjBody"></div>
+</section>
 <section class="tab" id="tab-analysis" hidden>
   <div class="nw-top">
     <span style="font-size:16px;font-weight:700">📊 分析</span>
@@ -1088,6 +1112,7 @@ watchProgress();
 <script src="turnover.js"></script>
 <script src="news.js"></script>
 <script src="analysis.js"></script>
+<script src="seiseki.js"></script>
 <script src="position.js"></script>
 </body>
 </html>
