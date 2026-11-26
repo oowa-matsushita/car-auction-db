@@ -772,7 +772,7 @@ async function load() {
   const clear = () => { rows.querySelectorAll("td.cs").forEach((t) => t.classList.remove("cs")); bar.hidden = true; start = end = null; };
   const range = () => ({ r0: Math.min(start.r, end.r), r1: Math.max(start.r, end.r), c0: Math.min(start.c, end.c), c1: Math.max(start.c, end.c) });
   const cells = () => { const g = range(), out = []; for (let r = g.r0; r <= g.r1; r++) { const tr = rows.rows[r]; if (!tr) continue; for (let c = g.c0; c <= g.c1; c++) if (tr.cells[c]) out.push(tr.cells[c]); } return out; };
-  const num = (t) => { const x = t.textContent.replace(/[,\s円万台km]/g, ""); return /^-?\d+(\.\d+)?$/.test(x) ? Number(x) : null; };
+  const num = (t) => { const x = t.textContent.replace(/[,\s円万台km]/g, ""); return /^[+\-−]?\d+(\.\d+)?$/.test(x) ? Number(x.replace("−", "-")) : null; };
   const f = (v, d) => (Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v).toLocaleString() : v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
   function paint() {
     rows.querySelectorAll("td.cs").forEach((t) => t.classList.remove("cs"));
