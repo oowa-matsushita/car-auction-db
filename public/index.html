@@ -161,6 +161,10 @@
   .tg { border: 1px solid #c9d8f5; background: linear-gradient(135deg, #f1f6ff, #fff); }
   .tg-in { font-size: 14px; } .tg-in input { width: 80px; font-size: 16px; font-weight: 700; text-align: right; padding: 2px 6px; }
   .an-pur .seg { display: inline-flex; margin-right: 10px; } .an-pur .seg button { border: 1px solid #b9c4d6; background: #fff; padding: 3px 14px; font-size: 12px; cursor: pointer; } .an-pur .seg button:first-child { border-radius: 14px 0 0 14px; } .an-pur .seg button:last-child { border-radius: 0 14px 14px 0; border-left: 0; } .an-pur .seg button.on { background: #13234a; color: #fff; border-color: #13234a; }
+  #selStat { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; padding: 5px 14px; background: #eaf2ff; border-top: 2px solid #3a78d8; font-size: 13px; color: #13234a; }
+  #selStat b { font-size: 15px; font-variant-numeric: tabular-nums; } #selStat span { color: #5a6b8c; font-size: 12px; } #selStat .x { margin-left: auto; cursor: pointer; border: 0; background: none; font-size: 16px; color: #5a6b8c; }
+  #grid td.cs { background: #cfe3ff !important; box-shadow: inset 0 0 0 1px #3a78d8; }
+  #grid.dragging { user-select: none; }
   .tg-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 10px 0; }
   .tg-kpis > div { background: #fff; border-radius: 8px; padding: 8px 12px; box-shadow: 0 1px 2px rgba(20,35,74,.08); display: flex; flex-direction: column; }
   .tg-kpis span { font-size: 11px; color: #667; } .tg-kpis b { font-size: 20px; color: #13234a; } .tg-kpis em { font-style: normal; font-size: 11px; color: #8a93a3; }
@@ -477,6 +481,7 @@
   <table id="grid"><thead><tr id="hdr"></tr></thead><tbody id="rows"></tbody></table>
   <div class="empty" id="empty" hidden>データがありません。出品票PDFをドロップして登録してください。</div>
 </div>
+<div id="selStat" hidden></div>
 <div id="sheet">
   <div class="bar2">
     <b id="sheetTtl">出品票</b><span id="sheetSub" style="color:#b9c6e4"></span><span style="flex:1"></span>
@@ -759,6 +764,60 @@ async function load() {
   $("rows").innerHTML = state.rows.map((r, i) => `<tr data-i="${i}" class="${r.id === selId ? "sel" : ""}">${COLUMNS.map(([k]) => td(r, k, i)).join("")}</tr>`).join("");
   $("empty").hidden = state.rows.length > 0;
 }
+// ---- 表の数字をドラッグで選ぶと、下に合計・平均などを出す（スプレッドシートと同じ使い方）----
+(function () {
+  const rows = $("rows"), bar = $("selStat"), grid = $("grid");
+  let start = null, end = null, dragging = false, moved = false, suppress = false;
+  const cellOf = (el) => { const td = el.closest && el.closest("#rows td"); return td ? { r: td.parentNode.rowIndex - 1, c: td.cellIndex, td } : null; };
+  const clear = () => { rows.querySelectorAll("td.cs").forEach((t) => t.classList.remove("cs")); bar.hidden = true; start = end = null; };
+  const range = () => ({ r0: Math.min(start.r, end.r), r1: Math.max(start.r, end.r), c0: Math.min(start.c, end.c), c1: Math.max(start.c, end.c) });
+  const cells = () => { const g = range(), out = []; for (let r = g.r0; r <= g.r1; r++) { const tr = rows.rows[r]; if (!tr) continue; for (let c = g.c0; c <= g.c1; c++) if (tr.cells[c]) out.push(tr.cells[c]); } return out; };
+  const num = (t) => { const x = t.textContent.replace(/[,\s円万台km]/g, ""); return /^-?\d+(\.\d+)?$/.test(x) ? Number(x) : null; };
+  const f = (v, d) => (Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v).toLocaleString() : v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
+  function paint() {
+    rows.querySelectorAll("td.cs").forEach((t) => t.classList.remove("cs"));
+    const cs = cells(); cs.forEach((t) => t.classList.add("cs"));
+    const v = cs.map(num).filter((x) => x != null);
+    if (!v.length) { bar.innerHTML = `<span>選択 ${cs.length}セル</span><span>数字のセルがありません</span><button class="x" title="選択をやめる">×</button>`; }
+    else { const sum = v.reduce((a, b) => a + b, 0); bar.innerHTML = `<span>選択 ${cs.length}セル（数字 ${v.length}個）</span><div>合計 <b>${f(sum, 1)}</b></div><div>平均 <b>${f(sum / v.length, 2)}</b></div><div><span>最小</span> <b>${f(Math.min(...v), 1)}</b></div><div><span>最大</span> <b>${f(Math.max(...v), 1)}</b></div><span>Ctrl+C でコピー</span><button class="x" title="選択をやめる">×</button>`; }
+    bar.hidden = false;
+    bar.querySelector(".x").onclick = clear;
+  }
+  rows.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    const c = cellOf(e.target); if (!c) return;
+    if (!e.shiftKey || !start) { start = c; }
+    end = c; dragging = true; moved = e.shiftKey && start && (start.r !== c.r || start.c !== c.c);
+    if (moved) { paint(); e.preventDefault(); } else clear2();
+    function clear2() { rows.querySelectorAll("td.cs").forEach((t) => t.classList.remove("cs")); bar.hidden = true; }
+  });
+  rows.addEventListener("mouseover", (e) => {
+    if (!dragging) return;
+    const c = cellOf(e.target); if (!c) return;
+    if (c.r !== start.r || c.c !== start.c) { moved = true; grid.classList.add("dragging"); }
+    end = c; if (moved) paint();
+  });
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false; grid.classList.remove("dragging");
+    if (moved) { suppress = true; setTimeout(() => (suppress = false), 0); }
+  });
+  // ドラッグしたあとに行が選ばれて出品票が切り替わらないようにする
+  rows.addEventListener("click", (e) => { if (suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  rows.addEventListener("dblclick", (e) => { if (moved && bar.hidden === false) e.stopImmediatePropagation(); }, true);
+  document.addEventListener("keydown", (e) => {
+    if (bar.hidden || !start) return;
+    if (e.key === "Escape") clear();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && !String(getSelection()).length) {
+      const g = range(), lines = [];
+      for (let r = g.r0; r <= g.r1; r++) { const tr = rows.rows[r]; if (!tr) continue; const row = []; for (let c = g.c0; c <= g.c1; c++) row.push(tr.cells[c] ? tr.cells[c].textContent.trim() : ""); lines.push(row.join("\t")); }
+      navigator.clipboard && navigator.clipboard.writeText(lines.join("\n")).catch(() => {});
+      e.preventDefault();
+    }
+  });
+  new MutationObserver(clear).observe(rows, { childList: true });
+})();
+
 $("rows").addEventListener("click", (e) => {
   const pen = e.target.closest("[data-edit]");
   if (pen) return openEdit(state.rows[pen.dataset.edit]);
