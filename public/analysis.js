@@ -275,7 +275,7 @@ async function loadPurchase() {
       <span class="tv-note">直近${list.length}${unit === "week" ? "週" : "か月"}：仕入 ${tot}台（オークション ${totA}・ディーラー ${totD}）・設定台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
     <div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 520)}px">${g}</svg></div>
     <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>オークション仕入（仕入れ台帳・左の目盛り）　<span class="an-key" style="background:#8e63d8"></span>ディーラー仕入（左の目盛り・積み上げ）　<span class="an-key" style="background:#e8761f"></span>設定台粗利の平均（右の目盛り・万円）<br>
-      オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;
+      オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（2026年8月以降だけ表示。今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;
   box.querySelectorAll("[data-u]").forEach((b) => (b.onclick = () => { an.purUnit = b.dataset.u; try { localStorage.setItem("anPurUnit", an.purUnit); } catch {} loadPurchase(); }));
 }
 

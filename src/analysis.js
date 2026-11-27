@@ -200,7 +200,7 @@ export async function handleAnalysis(request, env, url) {
     try {
       await db.prepare(DEALER_SQL).run();
       const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-      const { results: dl } = await db.prepare("SELECT buy_date AS d FROM dealer_purchases WHERE buy_date <= ?").bind(today).all();
+      const { results: dl } = await db.prepare("SELECT buy_date AS d FROM dealer_purchases WHERE buy_date >= '2026-08-01' AND buy_date <= ?").bind(today).all();
       for (const r of dl) { dm[r.d.slice(0, 7)] = (dm[r.d.slice(0, 7)] || 0) + 1; const k = mon(r.d); dw[k] = (dw[k] || 0) + 1; }
     } catch {}
     return json({ months: fin(months), weeks: fin(weeks), dealer: { months: dm, weeks: dw } });
