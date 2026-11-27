@@ -156,6 +156,30 @@ export async function handleAnalysis(request, env, url) {
     return json({ months, rows });
   }
 
+  // ディーラー仕入れ（オークションではない仕入れ）。在庫のCSV（在庫No・仕入金額・予定売価…）を入れ替えで保存する。仕入日は在庫No（Z26-1113-02 → 2026-11-13）から
+  const DEALER_SQL = "CREATE TABLE IF NOT EXISTS dealer_purchases ( stock_no TEXT PRIMARY KEY, buy_date TEXT, car_name TEXT, grade TEXT, plan_price INTEGER, cost INTEGER, filename TEXT, updated_at TEXT DEFAULT (datetime('now','localtime')) )";
+  if (path === "/api/dealer-purchases" && method === "POST") {
+    await db.prepare(DEALER_SQL).run();
+    const lines = (await request.text()).replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
+    const csvRow = (l) => { const out = []; let cur = "", q = false; for (const ch of l) { if (ch === '"') q = !q; else if (ch === "," && !q) { out.push(cur); cur = ""; } else cur += ch; } out.push(cur); return out; };
+    const head = csvRow(lines[0]).map((x) => x.normalize("NFKC").trim()), ix = (n) => head.indexOf(n);
+    if (ix("在庫No") < 0 || ix("仕入金額") < 0) return json({ error: "在庫No・仕入金額の列があるCSVではありません" }, 400);
+    const rows = [];
+    for (const l of lines.slice(1)) {
+      const c = csvRow(l), no = (c[ix("在庫No")] || "").trim(), m = no.match(/^Z(\d{2})-(\d{2})(\d{2})-\d+/);
+      if (!m) continue;
+      const mo = Number(m[2]), dd = Number(m[3]);
+      if (mo < 1 || mo > 12 || dd < 1 || dd > 31) continue; // 日付にならない番号は数えない
+      const num = (x) => { const n = Number(String(x || "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) && n > 0 ? Math.round(n) : null; };
+      rows.push([no, `20${m[1]}-${m[2]}-${m[3]}`, (c[ix("愛称名")] || "").normalize("NFKC").trim(), (c[ix("グレード")] || "").normalize("NFKC").trim(), num(c[ix("予定売価本体予定")]), num(c[ix("仕入金額")])]);
+    }
+    const filename = url.searchParams.get("filename") || "";
+    const st = [db.prepare("DELETE FROM dealer_purchases")];
+    for (const r of rows) st.push(db.prepare("INSERT OR REPLACE INTO dealer_purchases (stock_no, buy_date, car_name, grade, plan_price, cost, filename) VALUES (?,?,?,?,?,?,?)").bind(...r, filename));
+    for (let i = 0; i < st.length; i += 100) await db.batch(st.slice(i, i + 100));
+    return json({ ok: true, count: rows.length });
+  }
+
   // 仕入れ台帳から、月ごと・週ごとの仕入れ台数と台粗利（予定車両価格 − 落札×1.1。台帳の「予定−落札×1.1」と同じ）の平均
   if (path === "/api/purchases" && method === "GET") {
     const { results } = await db.prepare("SELECT auction_date AS d, bid_price_man AS bid, planned_price_man AS plan, result FROM vehicles WHERE auction_date IS NOT NULL AND bid_price_man IS NOT NULL").all();
@@ -171,7 +195,15 @@ export async function handleAnalysis(request, env, url) {
       }
     }
     const fin = (m) => Object.values(m).sort((a, b) => a.key.localeCompare(b.key)).map((x) => ({ key: x.key, n: x.n, gross_n: x.gn, gross_avg: x.gn ? x.gs / x.gn : null, bid_avg: x.n ? x.bid / x.n : null }));
-    return json({ months: fin(months), weeks: fin(weeks) });
+    // ディーラー仕入れ（台数だけ。在庫に残っている車の分）
+    const dm = {}, dw = {};
+    try {
+      await db.prepare(DEALER_SQL).run();
+      const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+      const { results: dl } = await db.prepare("SELECT buy_date AS d FROM dealer_purchases WHERE buy_date <= ?").bind(today).all();
+      for (const r of dl) { dm[r.d.slice(0, 7)] = (dm[r.d.slice(0, 7)] || 0) + 1; const k = mon(r.d); dw[k] = (dw[k] || 0) + 1; }
+    } catch {}
+    return json({ months: fin(months), weeks: fin(weeks), dealer: { months: dm, weeks: dw } });
   }
 
   // 今月の小売台数の目標（月ごとに保存。みんなで共通）と、その月の日ごとの小売台数

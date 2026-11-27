@@ -201,10 +201,8 @@ function drawAnalysis() {
     <tr><td>平日／土日祝（1日あたり）</td>${mm.map((x) => `<td class="n">${(x.wkA ?? 0).toFixed(1)}／${(x.ofA ?? 0).toFixed(1)}台</td>`).join("")}</tr>
     <tr><td>平均台粗利<br><small>値引き後・経費を引いた額</small></td>${mm.map((x) => `<td class="n">${man1a(x.g)}</td>`).join("")}</tr>
     <tr><td>売上高（税抜）<br><small>車輛本体−値引き</small></td>${mm.map((x) => `<td class="n">${Math.round(x.sl / 1e4).toLocaleString()}万円</td>`).join("")}</tr></tbody></table>`;
-  if (!an.khLoaded) { an.khLoaded = true; loadKnowhow(); }
   const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
-    <div class="an-card kh" id="anKh"><h3>📝 施策メモ（社長のノウハウ）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-pur" id="anPur"><h3>📦 仕入台数と設定台粗利</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
     <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
@@ -492,12 +490,6 @@ function drawCs() {
     <div class="an-sub" style="margin-top:10px">🚗 車種ごとの反響（3台以上掲載。1台1日の閲覧が平均の1.3倍以上は緑、0.6倍以下は赤）</div>
     <div style="max-height:420px;overflow:auto"><table class="tv-table cs-table"><thead><tr><th>車種</th><th>掲載</th><th>詳細閲覧</th><th>1台1日</th><th>問合せ</th><th>お気に入り</th><th>価格見直し</th><th>今月販売</th><th>平均掲載日数</th><th>判定</th></tr></thead><tbody>${mRows}</tbody></table></div>
     ${chg.length ? `<div class="an-sub" style="margin-top:10px">🏷️ 今月、本体価格を変えた車（変える前と後の1日あたりの閲覧）</div><table class="tv-table cs-table"><thead><tr><th>車種</th><th>グレード</th><th>変えた日</th><th>本体価格</th><th>閲覧/日（前→後）</th><th>問合せ（前→後）</th><th></th></tr></thead><tbody>
-      ${chg.map((r, i) => `<tr><td class="nm">${h(r.x.model)}</td><td class="gr">${h(r.x.grade)}</td><td>${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8))}</td><td class="n">${yen(r.from)} → <b class="${r.to < r.from ? "dn" : "up"}">${yen(r.to)}</b></td><td class="n">${r.bv == null ? "—" : r.bv.toFixed(1)} → ${r.av == null ? "—" : r.av.toFixed(1)}</td><td class="n">${r.bq} → ${r.aq}</td>
-        <td><button class="btn btn-sub" data-cskh="${i}" style="padding:1px 6px;font-size:11px" title="施策メモに記録して、販売の効果も追いかける">施策メモへ</button></td></tr>`).join("")}</tbody></table>` : ""}
+      ${chg.map((r, i) => `<tr><td class="nm">${h(r.x.model)}</td><td class="gr">${h(r.x.grade)}</td><td>${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8))}</td><td class="n">${yen(r.from)} → <b class="${r.to < r.from ? "dn" : "up"}">${yen(r.to)}</b></td><td class="n">${r.bv == null ? "—" : r.bv.toFixed(1)} → ${r.av == null ? "—" : r.av.toFixed(1)}</td><td class="n">${r.bq} → ${r.aq}</td></tr>`).join("")}</tbody></table>` : ""}
     <div class="tv-note" style="margin-top:4px">データ：カーセンサー「反響（物件別_数値分析）」。出力した日は途中なので、その前の日までを使っています。今月販売は販売データ（小売＋業販）の車種ごとの台数です。</div>`;
-  box.querySelectorAll("[data-cskh]").forEach((b) => (b.onclick = async () => {
-    const r = chg[b.dataset.cskh];
-    await fetch("/api/knowhow", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: r.x.model, kind: r.to < r.from ? "値下げ" : "値上げ", start: r.date, detail: `カーセンサーで本体価格 ${yen(r.from)}→${yen(r.to)}（${r.x.grade}）` }) });
-    b.textContent = "記録しました"; b.disabled = true; loadKnowhow();
-  }));
 }
