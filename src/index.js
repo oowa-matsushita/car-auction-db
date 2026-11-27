@@ -473,6 +473,14 @@ export default {
         return json({ uploads: results, reader: (env.READER || "claude").toLowerCase(), daily_limit: usesWorkersAI(env) ? dailyLimit(env) : null, used_today: used || 0 });
       }
 
+      // 何日も読み取りが進まないまま残っているページ（読み取り待ち・読み取り中）を片づける
+      if (path === "/api/uploads/clear-stale" && method === "POST") {
+        const { results } = await env.DB.prepare("SELECT upload_id, page_no FROM upload_pages WHERE status IN ('queued','processing','waiting') AND updated_at < datetime('now','localtime','-1 day')").all();
+        await Promise.all(results.map((r) => env.PDFS.delete(pageKey(r.upload_id, r.page_no)).catch(() => {})));
+        await env.DB.prepare("DELETE FROM upload_pages WHERE status IN ('queued','processing','waiting') AND updated_at < datetime('now','localtime','-1 day')").run();
+        return json({ ok: true, count: results.length });
+      }
+
       // 失敗したページを取り消す（同じPDFを何度も入れてしまったときなど）
       if (path === "/api/uploads/discard" && method === "POST") {
         const { results } = await env.DB.prepare("SELECT upload_id, page_no FROM upload_pages WHERE status = 'error'").all();
