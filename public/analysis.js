@@ -243,10 +243,14 @@ async function loadPurchase() {
   const box = $("anPur"); if (!box) return;
   if (!an.pur) { try { const r = await fetch("/api/purchases"); an.pur = await r.json(); if (!r.ok) throw 0; } catch { box.innerHTML = '<h3>📦 仕入台数と設定台粗利</h3><div class="tv-dim">読み込めませんでした</div>'; return; } }
   if (!document.body.contains(box) || $("anPur") !== box) return;
-  const unit = an.purUnit, all = unit === "week" ? an.pur.weeks : an.pur.months, list = all.slice(unit === "week" ? -13 : -12);
+  const unit = an.purUnit, au = unit === "week" ? an.pur.weeks : an.pur.months, dl = ((an.pur.dealer || {})[unit === "week" ? "weeks" : "months"]) || {};
+  // オークション（仕入れ台帳）とディーラー仕入れを、同じ月・週に並べる
+  const auBy = new Map(au.map((x) => [x.key, x]));
+  const all = [...new Set([...au.map((x) => x.key), ...Object.keys(dl)])].sort().map((k) => ({ ...(auBy.get(k) || { key: k, n: 0, gross_n: 0, gross_avg: null }), dn: dl[k] || 0 }));
+  const list = all.slice(unit === "week" ? -13 : -12);
   const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : `${Number(x.key.slice(5))}月`;
   const W = Math.max(520, list.length * 78), H = 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
-  const maxN = Math.max(...list.map((x) => x.n), 1);
+  const maxN = Math.max(...list.map((x) => x.n + x.dn), 1);
   const gv = list.map((x) => x.gross_avg).filter((v) => v != null), gMax = Math.max(...gv, 1), gMin = Math.min(0, ...gv);
   const yN = (v) => T + ih - (v / maxN) * ih, yG = (v) => T + ih - ((v - gMin) / (gMax - gMin || 1)) * ih;
   let g = "";
@@ -254,8 +258,10 @@ async function loadPurchase() {
   if (gMin < 0) g += `<line x1="${L}" x2="${W - R}" y1="${yG(0)}" y2="${yG(0)}" stroke="#d4691a" stroke-opacity=".5" stroke-dasharray="4 3"/>`;
   list.forEach((x, i) => {
     const cx = L + bw * i + bw / 2, bh = (x.n / maxN) * ih;
-    g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n)}" width="${bw * 0.6}" height="${bh}" rx="3" fill="#10b8c4" fill-opacity=".75"><title>${lab(x)}：仕入 ${x.n}台／設定台粗利の平均 ${x.gross_avg == null ? "—" : x.gross_avg.toFixed(1) + "万円"}（${x.gross_n}台で計算）</title></rect>`;
-    g += `<text x="${cx}" y="${yN(x.n) - 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0e8d97">${x.n}</text>`;
+    const dh = (x.dn / maxN) * ih;
+    g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n)}" width="${bw * 0.6}" height="${bh}" rx="3" fill="#10b8c4" fill-opacity=".75"><title>${lab(x)}：オークション ${x.n}台／ディーラー ${x.dn}台／設定台粗利の平均 ${x.gross_avg == null ? "—" : x.gross_avg.toFixed(1) + "万円"}（${x.gross_n}台で計算）</title></rect>`;
+    if (x.dn) g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n + x.dn)}" width="${bw * 0.6}" height="${dh}" rx="3" fill="#8e63d8" fill-opacity=".8"><title>${lab(x)}：ディーラー仕入れ ${x.dn}台</title></rect>`;
+    g += `<text x="${cx}" y="${yN(x.n + x.dn) - 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0e8d97">${x.n + x.dn}</text>`;
     g += `<text x="${cx}" y="${H - 24}" text-anchor="middle" font-size="11" fill="#334">${lab(x)}</text>`;
   });
   const pts = list.map((x, i) => (x.gross_avg == null ? null : [L + bw * i + bw / 2, yG(x.gross_avg), x.gross_avg])).filter(Boolean);
@@ -263,13 +269,13 @@ async function loadPurchase() {
     g += `<polyline points="${pts.map((q) => q[0] + "," + q[1]).join(" ")}" fill="none" stroke="#e8761f" stroke-width="2.5"/>`;
     pts.forEach((q) => { g += `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#e8761f" stroke="#fff" stroke-width="1.5"/><text x="${q[0]}" y="${q[1] - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="#c25a00" paint-order="stroke" stroke="#fff" stroke-width="3">${q[2].toFixed(1)}万</text>`; });
   }
-  const tot = list.reduce((q, x) => q + x.n, 0), gAll = list.reduce((q, x) => q + (x.gross_avg == null ? 0 : x.gross_avg * x.gross_n), 0), gN = list.reduce((q, x) => q + x.gross_n, 0);
+  const totA = list.reduce((q, x) => q + x.n, 0), totD = list.reduce((q, x) => q + x.dn, 0), tot = totA + totD, gAll = list.reduce((q, x) => q + (x.gross_avg == null ? 0 : x.gross_avg * x.gross_n), 0), gN = list.reduce((q, x) => q + x.gross_n, 0);
   box.innerHTML = `<h3>📦 仕入台数と設定台粗利</h3>
     <div class="tg-in"><span class="seg"><button class="${unit === "month" ? "on" : ""}" data-u="month">月ごと</button><button class="${unit === "week" ? "on" : ""}" data-u="week">週ごと</button></span>
-      <span class="tv-note">直近${list.length}${unit === "week" ? "週" : "か月"}：仕入 ${tot}台・設定台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
+      <span class="tv-note">直近${list.length}${unit === "week" ? "週" : "か月"}：仕入 ${tot}台（オークション ${totA}・ディーラー ${totD}）・設定台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
     <div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 520)}px">${g}</svg></div>
-    <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>仕入台数（左の目盛り）　<span class="an-key" style="background:#e8761f"></span>設定台粗利の平均（右の目盛り・万円）<br>
-      仕入台数＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。予定価格が空欄の車は、設定台粗利の平均には入りません。週は月曜〜日曜で、開催日で数えます。</div>`;
+    <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>オークション仕入（仕入れ台帳・左の目盛り）　<span class="an-key" style="background:#8e63d8"></span>ディーラー仕入（左の目盛り・積み上げ）　<span class="an-key" style="background:#e8761f"></span>設定台粗利の平均（右の目盛り・万円）<br>
+      オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;
   box.querySelectorAll("[data-u]").forEach((b) => (b.onclick = () => { an.purUnit = b.dataset.u; try { localStorage.setItem("anPurUnit", an.purUnit); } catch {} loadPurchase(); }));
 }
 
