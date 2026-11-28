@@ -252,19 +252,19 @@ if (!$("tab-analysis").hidden) loadAnalysis();
 
 // ---------- 今月の小売台数の目標と、週ごとの目標・進み具合 ----------
 // 仕入れの精度確認：仕入れ台帳の月ごと・週ごとの仕入れ台数と、台粗利の平均（予定車両価格 − 落札×1.1）
-const anPurUnit = (() => { try { return localStorage.getItem("anPurUnit") === "week" ? "week" : "month"; } catch { return "month"; } })();
+const anPurUnit = (() => { try { return ["week", "day"].includes(localStorage.getItem("anPurUnit")) ? localStorage.getItem("anPurUnit") : "month"; } catch { return "month"; } })();
 an.purUnit = anPurUnit;
 async function loadPurchase() {
   const box = $("anPur"); if (!box) return;
   if (!an.pur) { try { const r = await fetch("/api/purchases"); an.pur = await r.json(); if (!r.ok) throw 0; } catch { box.innerHTML = '<h3>📦 仕入台数と設定台粗利</h3><div class="tv-dim">読み込めませんでした</div>'; return; } }
   if (!document.body.contains(box) || $("anPur") !== box) return;
-  const unit = an.purUnit, au = unit === "week" ? an.pur.weeks : an.pur.months, dl = ((an.pur.dealer || {})[unit === "week" ? "weeks" : "months"]) || {};
+  const unit = an.purUnit, uk = unit === "week" ? "weeks" : unit === "day" ? "days" : "months", au = an.pur[uk] || [], dl = ((an.pur.dealer || {})[uk]) || {};
   // オークション（仕入れ台帳）とディーラー仕入れを、同じ月・週に並べる
   const auBy = new Map(au.map((x) => [x.key, x]));
   const all = [...new Set([...au.map((x) => x.key), ...Object.keys(dl)])].sort().map((k) => ({ ...(auBy.get(k) || { key: k, n: 0, gross_n: 0, gross_avg: null }), dn: dl[k] || 0 }));
-  const list = all.slice(unit === "week" ? -13 : -12);
-  const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : `${Number(x.key.slice(5))}月`;
-  const W = Math.max(520, list.length * 78), H = 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
+  const list = all.slice(unit === "week" ? -13 : unit === "day" ? -31 : -12);
+  const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : unit === "day" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}` : `${Number(x.key.slice(5))}月`;
+  const W = Math.max(520, list.length * (unit === "day" ? 34 : 78)), H = 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
   const maxN = Math.max(...list.map((x) => x.n + x.dn), 1);
   const gv = list.map((x) => x.gross_avg).filter((v) => v != null), gMax = Math.max(...gv, 1), gMin = Math.min(0, ...gv);
   const yN = (v) => T + ih - (v / maxN) * ih, yG = (v) => T + ih - ((v - gMin) / (gMax - gMin || 1)) * ih;
@@ -286,8 +286,8 @@ async function loadPurchase() {
   }
   const totA = list.reduce((q, x) => q + x.n, 0), totD = list.reduce((q, x) => q + x.dn, 0), tot = totA + totD, gAll = list.reduce((q, x) => q + (x.gross_avg == null ? 0 : x.gross_avg * x.gross_n), 0), gN = list.reduce((q, x) => q + x.gross_n, 0);
   box.innerHTML = `<h3>📦 仕入台数と設定台粗利</h3>
-    <div class="tg-in"><span class="seg"><button class="${unit === "month" ? "on" : ""}" data-u="month">月ごと</button><button class="${unit === "week" ? "on" : ""}" data-u="week">週ごと</button></span>
-      <span class="tv-note">直近${list.length}${unit === "week" ? "週" : "か月"}：仕入 ${tot}台（オークション ${totA}・ディーラー ${totD}）・設定台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
+    <div class="tg-in"><span class="seg"><button class="${unit === "month" ? "on" : ""}" data-u="month">月ごと</button><button class="${unit === "week" ? "on" : ""}" data-u="week">週ごと</button><button class="${unit === "day" ? "on" : ""}" data-u="day">日ごと</button></span>
+      <span class="tv-note">直近${list.length}${unit === "week" ? "週" : unit === "day" ? "日" : "か月"}：仕入 ${tot}台（オークション ${totA}・ディーラー ${totD}）・設定台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
     <div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 520)}px">${g}</svg></div>
     <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>オークション仕入（仕入れ台帳・左の目盛り）　<span class="an-key" style="background:#8e63d8"></span>ディーラー仕入（左の目盛り・積み上げ）　<span class="an-key" style="background:#e8761f"></span>設定台粗利の平均（右の目盛り・万円）<br>
       オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（2026年8月以降だけ表示。今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;

@@ -185,25 +185,25 @@ export async function handleAnalysis(request, env, url) {
     const { results } = await db.prepare("SELECT auction_date AS d, bid_price_man AS bid, planned_price_man AS plan, result FROM vehicles WHERE auction_date IS NOT NULL AND bid_price_man IS NOT NULL").all();
     const NOT_BOUGHT = new Set(["流れ", "流札", "下見", "商談"]);
     const mon = (d) => { const t = Date.parse(d + "T00:00:00Z"), w = (new Date(t).getUTCDay() + 6) % 7; return new Date(t - w * 864e5).toISOString().slice(0, 10); };
-    const months = {}, weeks = {};
+    const months = {}, weeks = {}, days = {};
     for (const r of results) {
       if (NOT_BOUGHT.has((r.result || "").trim())) continue;
       const g = r.plan != null ? r.plan - r.bid * 1.1 : null;
-      for (const [map, key] of [[months, r.d.slice(0, 7)], [weeks, mon(r.d)]]) {
+      for (const [map, key] of [[months, r.d.slice(0, 7)], [weeks, mon(r.d)], [days, r.d]]) {
         const x = (map[key] ||= { key, n: 0, gn: 0, gs: 0, bid: 0 });
         x.n++; x.bid += r.bid; if (g != null) { x.gn++; x.gs += g; }
       }
     }
     const fin = (m) => Object.values(m).sort((a, b) => a.key.localeCompare(b.key)).map((x) => ({ key: x.key, n: x.n, gross_n: x.gn, gross_avg: x.gn ? x.gs / x.gn : null, bid_avg: x.n ? x.bid / x.n : null }));
     // ディーラー仕入れ（台数だけ。在庫に残っている車の分）
-    const dm = {}, dw = {};
+    const dm = {}, dw = {}, dd = {};
     try {
       await db.prepare(DEALER_SQL).run();
       const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
       const { results: dl } = await db.prepare("SELECT buy_date AS d FROM dealer_purchases WHERE buy_date >= '2026-08-01' AND buy_date <= ?").bind(today).all();
-      for (const r of dl) { dm[r.d.slice(0, 7)] = (dm[r.d.slice(0, 7)] || 0) + 1; const k = mon(r.d); dw[k] = (dw[k] || 0) + 1; }
+      for (const r of dl) { dm[r.d.slice(0, 7)] = (dm[r.d.slice(0, 7)] || 0) + 1; const k = mon(r.d); dw[k] = (dw[k] || 0) + 1; dd[r.d] = (dd[r.d] || 0) + 1; }
     } catch {}
-    return json({ months: fin(months), weeks: fin(weeks), dealer: { months: dm, weeks: dw } });
+    return json({ months: fin(months), weeks: fin(weeks), days: fin(days), dealer: { months: dm, weeks: dw, days: dd } });
   }
 
   // 今月の小売台数の目標（月ごとに保存。みんなで共通）と、その月の日ごとの小売台数
