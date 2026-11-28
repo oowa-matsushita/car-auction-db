@@ -397,6 +397,11 @@ async function cachedFetch(request, env, ctx) {
       if (body.length < 900000) ctx.waitUntil(env.DB.prepare("INSERT OR REPLACE INTO api_cache (key, ver, body, created_at) VALUES (?, ?, ?, datetime('now'))").bind(path + url.search, ver, body).run().catch(() => {}));
     } else if (method !== "GET" && res.ok) {
       await bumpDataVer(env.DB);
+      // 次に開いたときにすぐ出るよう、よく見る集計を先に作っておく（返事のあとで実行）
+      if (path === "/api/inventory" || path === "/api/dealer-purchases" || path.startsWith("/api/vehicles") || path === "/api/weather" || path === "/api/settings/weather") {
+        const warmUrls = ["/api/turnover?ch=all&tax=ex", "/api/turnover/history?ch=all&tax=ex", "/api/analysis?ch=all&months=6", "/api/purchases", "/api/performance?ch=retail", "/api/review"];
+        ctx.waitUntil(Promise.all(warmUrls.map((u) => cachedFetch(new Request(new URL(u, url.origin), { method: "GET", headers: request.headers }), env, ctx).catch(() => {}))));
+      }
     }
   } catch {}
   return res;
