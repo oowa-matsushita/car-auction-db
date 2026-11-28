@@ -362,6 +362,7 @@ async function processPage(env, msg) {
 // データを書き換える操作（取り込み・編集・設定の保存・読み取りの完了）のたびに data_ver を新しくする。
 // data_ver が変わっていなければ、前に作った結果をそのまま返す（最長10分）
 const CACHE_PATHS = [/^\/api\/turnover/, /^\/api\/analysis$/, /^\/api\/carsensor$/, /^\/api\/purchases$/, /^\/api\/performance/, /^\/api\/target$/, /^\/api\/review$/];
+const CODE_VER = "2026-11-28b"; // 画面や集計の中身を変えたときは、この印も変えて、古い保存結果を使わないようにする
 let cacheTableReady = false;
 async function bumpDataVer(db) {
   await db.prepare("INSERT INTO app_settings (key, value) VALUES ('data_ver', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(Date.now()) + Math.random().toString(36).slice(2, 6)).run();
@@ -385,7 +386,7 @@ async function cachedFetch(request, env, ctx) {
       const row = await env.DB.prepare(
         `SELECT COALESCE((SELECT value FROM app_settings WHERE key='data_ver'), '0') AS ver,
                 (SELECT body FROM api_cache WHERE key = ?1 AND ver = COALESCE((SELECT value FROM app_settings WHERE key='data_ver'), '0') AND created_at > datetime('now','-10 minutes')) AS body`
-      ).bind(path + url.search).first();
+      ).bind(CODE_VER + path + url.search).first();
       ver = row ? row.ver : null;
       if (row && row.body) return new Response(row.body, { headers: { "content-type": "application/json; charset=utf-8", "x-cache": "hit" } });
     } catch { ver = null; }
@@ -394,7 +395,7 @@ async function cachedFetch(request, env, ctx) {
   try {
     if (cacheable && ver !== null && res.ok) {
       const body = await res.clone().text();
-      if (body.length < 1800000) ctx.waitUntil(env.DB.prepare("INSERT OR REPLACE INTO api_cache (key, ver, body, created_at) VALUES (?, ?, ?, datetime('now'))").bind(path + url.search, ver, body).run().catch(() => {}));
+      if (body.length < 1800000) ctx.waitUntil(env.DB.prepare("INSERT OR REPLACE INTO api_cache (key, ver, body, created_at) VALUES (?, ?, ?, datetime('now'))").bind(CODE_VER + path + url.search, ver, body).run().catch(() => {}));
     } else if (method !== "GET" && res.ok) {
       await bumpDataVer(env.DB);
       // 次に開いたときにすぐ出るよう、よく見る集計を先に作っておく（返事のあとで実行）
