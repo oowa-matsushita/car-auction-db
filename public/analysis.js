@@ -218,10 +218,10 @@ function drawAnalysis() {
     <tr><td>売上高（税抜）<br><small>車輛本体−値引き</small></td>${mm.map((x) => `<td class="n">${Math.round(x.sl / 1e4).toLocaleString()}万円</td>`).join("")}</tr></tbody></table>`;
   const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
-    <div class="an-card an-prc" id="anPrc"><h3>🏷 価格改定の効果（価格を変えたあと売れたか）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-pur" id="anPur"><h3>📦 仕入台数と設定台粗利</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
     <div class="an-card an-tips"><h3>💡 わかったこと（直近3か月）</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
+    <div class="an-card an-prc" id="anPrc"><h3>🏷 価格改定の効果（価格を変えたあと売れたか）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card tg" id="anPast"><h3>📜 過去の実績（月を選んで見る）</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}

@@ -249,6 +249,7 @@ const REG_SECTION = `<section class="tab" id="tab-register" hidden>
     <th><input type="checkbox" id="rgAll"></th><th>状態</th><th>コピー元在庫番号</th><th>新在庫番号</th><th>開催日</th><th>会場→仕入先</th><th>出品番号</th>
     <th>車名</th><th>グレード</th><th>型式</th><th>車台番号</th><th>年式</th><th>走行km</th><th>車検</th><th>色</th><th>評価</th><th>落札(万)</th><th>予定(万)</th><th>メモ</th>
   </tr></thead><tbody id="rgBody"></tbody></table>
+  <div style="text-align:center;margin:10px 0"><button id="rgMore" hidden style="padding:8px 28px;font-size:14px">さらに表示する</button></div>
   <details id="rgSettings"><summary>価格の計算方法</summary>
     <div class="rg-help">仕入金額(税抜) ＝ 落札額(万円)×10000×倍率＋加算（一等書記官の「原価税抜」に入れる値）／ 予定価格 ＝ 予定車両価格(万円)×10000×倍率＋加算</div>
     仕入金額：倍率 <input id="rgCm" size="5"> 加算 <input id="rgCa" size="8">
@@ -271,7 +272,7 @@ const REG_SCRIPT = `<script>
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return s == null ? "" : String(s).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]; }); };
   var LABEL = { none: "未入力", draft: "コピー元入力済み", exported: "指示済み", registered: "登録済み", skip: "対象外" };
-  var rows = [];
+  var rows = [], days = 5; // 最初は直近5日分（開催日の数）。「さらに表示」で5日ずつ増やす
   function api(path, opt) {
     return fetch(path, opt).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
@@ -279,17 +280,18 @@ const REG_SCRIPT = `<script>
   function ymd(d) { return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10); }
   function init() {
     var now = new Date();
-    $("rgFrom").value = ymd(new Date(now.getTime() - 14 * 86400000));
+    $("rgFrom").value = ymd(new Date(now.getTime() - 90 * 86400000));
     $("rgTo").value = ymd(now);
-    $("rgLoad").onclick = load;
-    $("rgQ").onkeydown = function (e) { if (e.key === "Enter") load(); };
-    $("rgStatus").onchange = load;
+    $("rgLoad").onclick = function () { days = 5; load(); };
+    $("rgQ").onkeydown = function (e) { if (e.key === "Enter") { days = 5; load(); } };
+    $("rgStatus").onchange = function () { days = 5; load(); };
     $("rgAll").onchange = function () { document.querySelectorAll("#rgBody .rg-chk").forEach(function (c) { c.checked = $("rgAll").checked; }); count(); };
     $("rgExport").onclick = function () { exportCsv(false); };
     $("rgExportTest").onclick = function () { exportCsv(true); };
     $("rgDone").onclick = function () { bulk("registered"); };
     $("rgSkip").onclick = function () { bulk("skip"); };
     $("rgSaveSet").onclick = saveSettings;
+    $("rgMore").onclick = function () { days += 5; render(); };
     $("rgSup").addEventListener("toggle", function () { if ($("rgSup").open) loadSup(); });
     load();
   }
@@ -303,7 +305,11 @@ const REG_SCRIPT = `<script>
   }
   function render() {
     $("rgAll").checked = false;
-    $("rgBody").innerHTML = rows.map(function (r) {
+    var dts = []; rows.forEach(function (r) { if (dts.indexOf(r.auction_date) < 0) dts.push(r.auction_date); });
+    var show = dts.slice(0, days), vis = rows.filter(function (r) { return show.indexOf(r.auction_date) >= 0; });
+    $("rgMore").hidden = dts.length <= days;
+    $("rgMore").textContent = "さらに表示する（あと" + Math.min(5, dts.length - days) + "日分／残り" + (dts.length - days) + "日）";
+    $("rgBody").innerHTML = vis.map(function (r) {
       var yr = r.year ? ("R" + String(r.year - 2018).padStart(2, "0") + (r.first_reg_month ? "." + String(r.first_reg_month).padStart(2, "0") : "")) : "";
       return "<tr data-id='" + r.id + "'>" +
         "<td><input type='checkbox' class='rg-chk'></td>" +
