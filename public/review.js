@@ -4,7 +4,7 @@ const rv = { items: [], kinds: [], selId: null, token: 0, bmp: null, regions: {}
 const RV_FIELDS = [
   ["control_no", "管理番号", 1], ["auction_date", "開催日"], ["bid_price_man", "落札金額(万円)", 1],
   ["planned_price_man", "予定価格(万円)", 1], ["start_price_man", "スタート(万円)"], ["car_name", "車名"],
-  ["grade", "グレード"], ["color", "色"], ["mileage_km", "走行(km)"], ["inspection", "車検日(R10.05)", 1], ["recycle_fee", "リサイクル券(円)", 1], ["chassis_no", "車台番号"], ["handwritten_note", "手書きメモ", 0, 1],
+  ["grade", "グレード"], ["color", "色名（ホワイトなど）"], ["color_code", "カラーNo（W25など）"], ["mileage_km", "走行(km)"], ["inspection", "車検日(R10.05)", 1], ["recycle_fee", "リサイクル券(円)", 1], ["chassis_no", "車台番号"], ["handwritten_note", "手書きメモ", 0, 1],
 ];
 const RV_NUM = new Set(["bid_price_man", "planned_price_man", "start_price_man", "mileage_km", "recycle_fee"]);
 
