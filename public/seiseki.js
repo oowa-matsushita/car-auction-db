@@ -19,6 +19,15 @@ async function loadSeiseki() {
   drawSeiseki();
 }
 
+// 担当者を押したとき：直近3か月の月ごとの販売台数（小売のみ）を棒グラフで出す
+function sjChart(st) {
+  const d = sj.data, ms = d.months.slice(0, 3).reverse();
+  const vals = ms.map((m) => { const r = d.rows.find((x) => x.month === m && x.staff === st); return r ? r.retail : 0; });
+  const mx = Math.max(...vals, 1), W = 360, H = 130, bw = 70, gap = (W - bw * ms.length) / (ms.length + 1);
+  const bars = vals.map((v, i) => { const x = gap + i * (bw + gap), hh = (v / mx) * (H - 52); return `<rect x="${x}" y="${H - 28 - hh}" width="${bw}" height="${Math.max(hh, 1)}" rx="4" fill="#10b8c4"/><text x="${x + bw / 2}" y="${H - 32 - hh}" text-anchor="middle" font-size="15" font-weight="800" fill="#13234a">${v}台</text><text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="12" fill="#334">${Number(ms[i].slice(5))}月${i === ms.length - 1 && ms[i] === d.months[0] ? "（途中）" : ""}</text>`; }).join("");
+  return `<div style="margin:2px 0 8px"><b style="font-size:12px;color:#13234a">直近3か月の販売台数（小売）</b><svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;display:block">${bars}</svg></div>`;
+}
+
 function drawSeiseki() {
   const d = sj.data, body = $("sjBody");
   if (!d || !d.months.length) { body.innerHTML = '<div class="nw-empty">担当者つきの販売データがありません。「担当者名」の列がある販売データのCSVを、回転率のタブから取り込んでください。</div>'; $("sjInfo").textContent = ""; return; }
@@ -30,7 +39,7 @@ function drawSeiseki() {
   const total = list.reduce((s, a) => s + a.n, 0);
   $("sjInfo").textContent = use.length === 1 ? `${sjMonthL(use[0])}（小売のみ）` : `${sjMonthL(use[use.length - 1])}〜${sjMonthL(use[0])}（小売のみ）`;
   body.innerHTML = `<div class="sj-card" style="max-width:720px"><table class="sj-tb"><thead><tr><th>営業</th><th>販売台数</th></tr></thead><tbody>${
-    list.map((a) => `<tr class="sj-row${sj.open === a.staff ? " on" : ""}" data-st="${h(a.staff)}"><td>${sj.open === a.staff ? "▼" : "▶"} ${h(a.name)}</td><td><b>${a.n}台</b></td></tr>${sj.open === a.staff ? `<tr class="sj-det"><td colspan="2"><div id="sjDet" class="tv-note">読み込み中…</div></td></tr>` : ""}`).join("")}</tbody><tfoot><tr><td><b>合計</b></td><td><b>${total}台</b></td></tr></tfoot></table></div>`;
+    list.map((a) => `<tr class="sj-row${sj.open === a.staff ? " on" : ""}" data-st="${h(a.staff)}"><td>${sj.open === a.staff ? "▼" : "▶"} ${h(a.name)}</td><td><b>${a.n}台</b></td></tr>${sj.open === a.staff ? `<tr class="sj-det"><td colspan="2">${sjChart(a.staff)}<div id="sjDet" class="tv-note">読み込み中…</div></td></tr>` : ""}`).join("")}</tbody><tfoot><tr><td><b>合計</b></td><td><b>${total}台</b></td></tr></tfoot></table></div>`;
 }
 $("sjSpan").addEventListener("change", () => { sj.open = null; drawSeiseki(); });
 // 担当者の行を押すと、その人が販売した車の一覧を、行の下に開く
