@@ -39,7 +39,7 @@ function drawSeiseki() {
   const total = list.reduce((s, a) => s + a.n, 0);
   $("sjInfo").textContent = use.length === 1 ? `${sjMonthL(use[0])}（小売のみ）` : `${sjMonthL(use[use.length - 1])}〜${sjMonthL(use[0])}（小売のみ）`;
   body.innerHTML = `<div class="sj-card" style="max-width:720px"><table class="sj-tb"><thead><tr><th>営業</th><th>販売台数</th></tr></thead><tbody>${
-    list.map((a) => `<tr class="sj-row${sj.open === a.staff ? " on" : ""}" data-st="${h(a.staff)}"><td>${sj.open === a.staff ? "▼" : "▶"} ${h(a.name)}</td><td><b>${a.n}台</b></td></tr>${sj.open === a.staff ? `<tr class="sj-det"><td colspan="2">${sjChart(a.staff)}<div id="sjDet" class="tv-note">読み込み中…</div></td></tr>` : ""}`).join("")}</tbody><tfoot><tr><td><b>合計</b></td><td><b>${total}台</b></td></tr></tfoot></table></div>`;
+    list.map((a) => `<tr class="sj-row${sj.open === a.staff ? " on" : ""}" data-st="${h(a.staff)}"><td>${sj.open === a.staff ? "▼" : "▶"} ${h(a.name)}</td><td><b>${a.n}台</b></td></tr>${sj.open === a.staff ? `<tr class="sj-det"><td colspan="2">${sjChart(a.staff)}</td></tr>` : ""}`).join("")}</tbody><tfoot><tr><td><b>合計</b></td><td><b>${total}台</b></td></tr></tfoot></table></div>`;
 }
 $("sjSpan").addEventListener("change", () => { sj.open = null; drawSeiseki(); });
 // 担当者の行を押すと、その人が販売した車の一覧を、行の下に開く
@@ -48,13 +48,4 @@ $("sjBody").addEventListener("click", async (e) => {
   const st = tr.dataset.st;
   sj.open = sj.open === st ? null : st;
   drawSeiseki();
-  if (!sj.open) return;
-  const v = $("sjSpan").value, d = sj.data, use = v === "all" ? d.months : v === "3" ? d.months.slice(0, 3) : [v];
-  try {
-    const r = await fetch(`/api/performance/cars?ch=retail&staff=${encodeURIComponent(st)}&months=${use.join(",")}`), j = await r.json();
-    const box = $("sjDet"); if (!box || sj.open !== st) return;
-    const man = (x) => (x == null ? "—" : (x / 10000).toFixed(1) + "万円");
-    box.className = "";
-    box.innerHTML = `<table class="sj-tb sj-in"><thead><tr><th>契約日</th><th>車名</th><th>本体価格（値引後）</th><th>台粗利</th></tr></thead><tbody>${j.cars.map((c) => `<tr><td>${h(String(c.date || "").slice(5).replace("-", "/"))}</td><td>${h(c.car)}${c.is_new ? ' <span class="tv-note">新車</span>' : ""}</td><td>${man(c.price)}</td><td>${man(c.gross)}</td></tr>`).join("")}</tbody></table>`;
-  } catch { const box = $("sjDet"); if (box) box.textContent = "読み込めませんでした"; }
 });
