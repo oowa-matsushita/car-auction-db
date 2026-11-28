@@ -399,7 +399,7 @@ async function cachedFetch(request, env, ctx) {
       await bumpDataVer(env.DB);
       // 次に開いたときにすぐ出るよう、よく見る集計を先に作っておく（返事のあとで実行）
       if (path === "/api/inventory" || path === "/api/dealer-purchases" || path.startsWith("/api/vehicles") || path === "/api/weather" || path === "/api/settings/weather") {
-        const warmUrls = ["/api/turnover?ch=all&tax=ex", "/api/turnover/history?ch=all&tax=ex", "/api/analysis?ch=all&months=6", "/api/purchases", "/api/performance?ch=retail", "/api/review"];
+        const warmUrls = ["/api/turnover?ch=all&tax=ex", "/api/turnover/history?ch=all&tax=ex", "/api/analysis?ch=all&months=6", "/api/purchases", "/api/performance?ch=retail", "/api/review", "/api/carsensor", "/api/target"];
         ctx.waitUntil(Promise.all(warmUrls.map((u) => cachedFetch(new Request(new URL(u, url.origin), { method: "GET", headers: request.headers }), env, ctx).catch(() => {}))));
       }
     }

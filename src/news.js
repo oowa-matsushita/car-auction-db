@@ -182,9 +182,14 @@ export async function handleNews(request, env, url, ctx) {
   const meta = await db.prepare("SELECT value FROM app_settings WHERE key = 'news_fetched'").first();
   let fetched = meta ? JSON.parse(meta.value) : null;
   const force = url.searchParams.get("force") === "1";
-  if (force || !fetched || Date.now() - Date.parse(fetched.at) > STALE_MS) {
+  const stale = !fetched || Date.now() - Date.parse(fetched.at) > STALE_MS;
+  if (force || !fetched) {
+    // はじめて／手動のときだけ、取り終わるまで待つ
     const status = await refreshNews(env);
     fetched = { at: new Date().toISOString(), status };
+  } else if (stale && ctx && ctx.waitUntil) {
+    // 古いときは、今ある記事をすぐ返して、裏で取り直す（表示を待たせない）
+    ctx.waitUntil(refreshNews(env).catch(() => {}));
   }
   // まとめていない記事があれば、裏で少しずつ AI にまとめさせる（画面は待たない）
   if (ctx?.waitUntil) ctx.waitUntil(summarizeNews(env, 12).catch(() => {}));
