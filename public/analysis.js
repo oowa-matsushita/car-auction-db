@@ -264,7 +264,7 @@ async function loadPurchase() {
   const all = [...new Set([...au.map((x) => x.key), ...Object.keys(dl)])].sort().map((k) => ({ ...(auBy.get(k) || { key: k, n: 0, gross_n: 0, gross_avg: null }), dn: dl[k] || 0 }));
   const list = all.slice(unit === "week" ? -13 : unit === "day" ? -15 : -12);
   const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : unit === "day" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}（${AN_DOW[new Date(x.key + "T00:00:00Z").getUTCDay()]}）` : `${Number(x.key.slice(5))}月`;
-  const W = Math.max(520, list.length * (unit === "day" ? 64 : 78)), H = unit === "day" ? 268 : 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
+  const W = Math.max(520, list.length * (unit === "day" ? 64 : 78)), H = unit === "day" ? 276 : 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
   const maxN = Math.max(...list.map((x) => x.n + x.dn), 1);
   const gv = list.map((x) => x.gross_avg).filter((v) => v != null), gMax = Math.max(...gv, 1), gMin = Math.min(0, ...gv);
   const yN = (v) => T + ih - (v / maxN) * ih, yG = (v) => T + ih - ((v - gMin) / (gMax - gMin || 1)) * ih;
@@ -278,7 +278,7 @@ async function loadPurchase() {
     if (x.dn) g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n + x.dn)}" width="${bw * 0.6}" height="${dh}" rx="3" fill="#8e63d8" fill-opacity=".8"><title>${lab(x)}：ディーラー仕入れ ${x.dn}台</title></rect>`;
     g += `<text x="${cx}" y="${yN(x.n + x.dn) - 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0e8d97">${x.n + x.dn}</text>`;
     g += `<text x="${cx}" y="${H - 24}" text-anchor="middle" font-size="11" fill="#334">${lab(x)}</text>`;
-    if (unit === "day") g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="10" font-weight="700" fill="${x.gross_sum == null ? "#aab" : x.gross_sum < 0 ? "#c62828" : "#c25a00"}">${x.gross_sum == null ? "—" : Math.round(x.gross_sum) + "万"}</text>`;
+    if (unit === "day") g += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="14" font-weight="800" fill="${x.gross_sum == null ? "#aab" : x.gross_sum < 0 ? "#c62828" : "#c25a00"}">${x.gross_sum == null ? "—" : Math.round(x.gross_sum) + "万"}</text>`;
   });
   const pts = list.map((x, i) => (x.gross_avg == null ? null : [L + bw * i + bw / 2, yG(x.gross_avg), x.gross_avg])).filter(Boolean);
   if (pts.length) {
