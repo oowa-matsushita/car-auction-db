@@ -218,6 +218,7 @@ function drawAnalysis() {
     <tr><td>売上高（税抜）<br><small>車輛本体−値引き</small></td>${mm.map((x) => `<td class="n">${Math.round(x.sl / 1e4).toLocaleString()}万円</td>`).join("")}</tr></tbody></table>`;
   const adv = anAdvice(d, days);
   $("anBody").innerHTML = `
+    <div class="an-card an-prc" id="anPrc"><h3>🏷 価格改定の効果（価格を変えたあと売れたか）</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-pur" id="anPur"><h3>📦 仕入台数と設定台粗利</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
     <div class="an-card an-tips"><h3>💡 わかったこと（直近3か月）</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
@@ -243,6 +244,7 @@ function drawAnalysis() {
       <table class="tv-table an-table"><thead><tr><th>日付</th><th>曜日</th><th>販売</th><th>天気（${h(d.place || "")}）</th><th>普段との差</th></tr></thead><tbody>${topDays.map((x) => `<tr><td>${x.date}</td><td>${AN_DOW[x.dow]}${x.off && x.dow >= 1 && x.dow <= 5 ? "（祝）" : ""}</td><td class="n"><b>${x.sold}</b>台</td><td>${wxTxt(x)}</td><td class="n">${pctS(x.idx - 1)}</td></tr>`).join("")}</tbody></table></div>`;
   loadTarget();
   loadPurchase();
+  loadPriceEffect();
   drawKnowhow();
   if (an.cs === undefined) { an.cs = null; loadCs(); } else drawCs();
   $("anInfo").textContent = hasWx ? `天気：${d.place || ""}（気象庁）` : "天気データなし";
@@ -293,6 +295,34 @@ async function loadPurchase() {
     <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>オークション仕入（仕入れ台帳・左の目盛り）　<span class="an-key" style="background:#8e63d8"></span>ディーラー仕入（左の目盛り・積み上げ）　<span class="an-key" style="background:#e8761f"></span>設定台粗利の平均（右の目盛り・万円）<br>
       オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（2026年8月以降だけ表示。今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。日ごとは、日付の下の数字がその日の設定台粗利の合計（万円）です。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;
   box.querySelectorAll("[data-u]").forEach((b) => (b.onclick = () => { an.purUnit = b.dataset.u; try { localStorage.setItem("anPurUnit", an.purUnit); } catch {} loadPurchase(); }));
+}
+
+// 価格改定の効果：値下げ（改売値）のあと、同じ車が売れたか（販売データの走行距離・色で結びつけ）
+async function loadPriceEffect() {
+  const box = $("anPrc"); if (!box) return;
+  let d;
+  try { const r = await fetch("/api/price-effect"); d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); }
+  catch (e) { box.innerHTML = `<h3>🏷 価格改定の効果</h3><div class="tv-dim">読み込めませんでした（${h(e.message)}）</div>`; return; }
+  if (!document.body.contains(box) || $("anPrc") !== box) return;
+  const pc = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "—");
+  const dn = d.down, md = (x) => `${Number(x.slice(5, 7))}/${Number(x.slice(8))}`;
+  const row = (label, o) => `<tr><td>${label}</td><td class="n">${o.n}台</td><td class="n">${o.avg_cut.toFixed(1)}万円</td><td class="n"><b>${pc(o.sold7, o.n7)}</b><span class="tv-dim"> ${o.sold7}/${o.n7}</span></td><td class="n"><b>${pc(o.sold14, o.n14)}</b><span class="tv-dim"> ${o.sold14}/${o.n14}</span></td><td class="n"><b>${pc(o.sold30, o.n30)}</b><span class="tv-dim"> ${o.sold30}/${o.n30}</span></td><td class="n">${o.avg_days == null ? "—" : o.avg_days.toFixed(0) + "日"}</td></tr>`;
+  const head = "<thead><tr><th></th><th>台数</th><th>平均の値下げ</th><th>7日以内</th><th>14日以内</th><th>30日以内</th><th>売れるまで</th></tr></thead>";
+  const last = d.rows.filter((r) => r.date === d.by_date[d.by_date.length - 1].date).sort((a, b) => (b.sold ? 1 : 0) - (a.sold ? 1 : 0) || b.cut - a.cut);
+  const lr = last.map((r) => `<tr><td>${h(r.name)}</td><td>${h(r.color || "")}</td><td class="n">${r.mileage ?? ""}</td><td class="n">${r.old} → <b>${r.new}</b></td><td class="n">${r.cut > 0 ? "−" : "+"}${Math.abs(r.cut).toFixed(1)}</td><td>${r.sold ? `<b style="color:#1f9d45">売れた</b> ${md(r.sold)}（${r.days}日後）` : '<span class="tv-dim">まだ</span>'}</td></tr>`).join("");
+  box.innerHTML = `<h3>🏷 価格改定の効果（価格を変えたあと売れたか）</h3>
+    <div class="tv-note">価格改定表（改売値）の車を、販売データ（${md(d.from)}〜${md(d.through)}）の走行距離・色・車種で結びつけて、改定の日から何日で売れたかを見ています。値下げ ${dn.n}台（改定日${d.by_date.length}回）。</div>
+    <div class="an-kpis" style="margin:8px 0"><div class="an-kpi"><span>値下げ後 7日以内に売れた</span><b>${pc(dn.sold7, dn.n7)}</b><em>${dn.sold7}／${dn.n7}台</em></div>
+      <div class="an-kpi"><span>14日以内</span><b>${pc(dn.sold14, dn.n14)}</b><em>${dn.sold14}／${dn.n14}台</em></div>
+      <div class="an-kpi"><span>30日以内</span><b>${pc(dn.sold30, dn.n30)}</b><em>${dn.sold30}／${dn.n30}台</em></div>
+      <div class="an-kpi"><span>売れた車の、売れるまで</span><b>${dn.avg_days == null ? "—" : dn.avg_days.toFixed(0) + "日"}</b><em>改定日から</em></div></div>
+    <div class="an-sub">値下げの幅ごと（幅が大きいほど売れたか）</div>
+    <table class="tv-table cs-table">${head}<tbody>${d.buckets.map((b) => row(b.label, b)).join("")}</tbody></table>
+    <div class="an-sub" style="margin-top:10px">改定日ごと</div>
+    <table class="tv-table cs-table">${head}<tbody>${d.by_date.slice().reverse().map((b) => row(md(b.date) + "改定", b)).join("")}</tbody></table>
+    <details style="margin-top:10px"><summary><b>直近の改定（${md(last[0].date)}）の車ごとの結果</b>　${last.length}台中 ${last.filter((r) => r.sold).length}台が売れた</summary>
+      <div style="max-height:380px;overflow:auto"><table class="tv-table cs-table"><thead><tr><th>車名</th><th>色</th><th>走行</th><th>売値（万円）</th><th>値下げ</th><th>結果</th></tr></thead><tbody>${lr}</tbody></table></div></details>
+    <div class="tv-note" style="margin-top:6px">％は、改定日から数えて、その日数がたった車のうち売れた割合です。値下げされるのは、もともと売れ残っていた車なので、全体の月間回転率と並べて見てください。販売データに走行距離が入っている9月以降の改定だけを見ています。販売データに走行距離が入っていない車（走行が5km前後の登録済未使用車など）は、車種と色だけで結びつけているため、確度がやや低くなります。</div>`;
 }
 
 // 日の重み：平日＝1、土日祝＝過去の小売の「土日祝1日÷平日1日」（ratio）。目標をこの重みで日ごとに配る
