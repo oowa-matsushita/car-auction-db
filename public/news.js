@@ -10,7 +10,7 @@ const NW_FOCUS = [
 const nwText = (it) => String((it.ai_title || "") + " " + it.title + " " + (it.summary || "") + " " + (Array.isArray(it.ai_points) ? it.ai_points.join(" ") : "")).normalize("NFKC");
 // オートバイ・自動運転サービスなど、中古車販売に関係の薄い話題は注目から外す
 const NW_EXCLUDE = /バイク|二輪|スクーター|オートバイ|モーターサイクル|ドゥカティ|アプリリア|ハーレー|トライアンフ|GSX|Ninja|CBR|\d{2,4}cc|ロボタクシー|自動運転タクシー|鉄道|航空|船舶|カーナビ|ドラレコ|タイヤ|チャージャー|カー用品/i;
-const nwFocusOf = (it) => (NW_EXCLUDE.test(nwText(it)) ? [] : NW_FOCUS.filter(([, , re]) => re.test(nwText(it))).map(([k]) => k));
+const nwFocusOf = (it) => (it.ai_kind === "none" || NW_EXCLUDE.test(nwText(it)) ? [] : NW_FOCUS.filter(([, , re]) => re.test(nwText(it))).map(([k]) => k));
 const nwMatchCat = (it, k) => !k ? true : k === "focus" ? nwFocusOf(it).length > 0 : NW_FOCUS.some(([fk]) => fk === k) ? nwFocusOf(it).includes(k) : it.category === k;
 const nwKey = (s) => String(s || "").normalize("NFKC").toUpperCase().replace(/[\s\-‐－・]/g, "");
 async function loadNews(force) {
@@ -38,7 +38,7 @@ async function loadStockNames() {
     drawNews();
   } catch {}
 }
-const stockOf = (it) => { const k = nwKey(it.title); return nw.stockNames.find((s) => k.includes(s.key)); };
+const stockOf = (it) => { const k = nwKey(it.title + " " + (it.ai_car || "")); return nw.stockNames.find((s) => k.includes(s.key)); };
 const ago = (iso) => {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
   if (m < 60) return `${Math.max(1, m)}分前`;
@@ -67,7 +67,10 @@ function drawNews() {
     const s = src[it.source] || { name: it.source, color: "#13234a" }, st = stockOf(it);
     const fresh = Date.now() - Date.parse(it.published_at) < 6 * 3600e3;
     const pts = Array.isArray(it.ai_points) && it.ai_points.length ? it.ai_points : null;
-    const tags = nwFocusOf(it).map((k) => `<span class="fcs ${k}">${h(NW_FOCUS.find((f) => f[0] === k)[1])}</span>`).join("") || `<span class="cat">${h(nw.categories[it.category] || "その他")}</span>`;
+    const KIND = { stop: ["⛔ 供給停止", "#c62828"], resume: ["✅ 再開", "#1f7a3a"], model: ["🆕 新型・改良", "#1565c0"], price: ["💴 価格", "#ef6c00"] };
+    const kd = KIND[it.ai_kind] ? `<span class="fcs" style="background:${KIND[it.ai_kind][1]};color:#fff">${KIND[it.ai_kind][0]}</span>` : "";
+    const car = it.ai_car ? `<span class="cat" title="AIが読み取った車種">${h(it.ai_car)}</span>` : "";
+    const tags = kd + car + nwFocusOf(it).filter((k) => !(kd && k === "stop")).map((k) => `<span class="fcs ${k}">${h(NW_FOCUS.find((f) => f[0] === k)[1])}</span>`).join("") || `<span class="cat">${h(nw.categories[it.category] || "その他")}</span>`;
     const detail = [pts ? pts.join(" ／ ") : (it.summary && !it.summary.startsWith("出典") ? it.summary : ""), `元の見出し：${it.title}`].filter(Boolean).join("\n");
     return `<a class="nw-row ${hot ? "hot" : ""}" href="${h(it.url)}" target="_blank" rel="noopener noreferrer" style="--c:${s.color}" title="${h(detail)}">
       <span class="when">${fresh ? '<b class="new">NEW</b>' : ""}${ago(it.published_at)}</span>

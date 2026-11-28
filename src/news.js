@@ -10,6 +10,8 @@ export const NEWS_SCHEMA = [
   "ALTER TABLE news_items ADD COLUMN ai_points TEXT",
   "ALTER TABLE news_items ADD COLUMN ai_tries INTEGER DEFAULT 0",
   "ALTER TABLE news_items ADD COLUMN ai_ver INTEGER DEFAULT 0",
+  "ALTER TABLE news_items ADD COLUMN ai_kind TEXT",
+  "ALTER TABLE news_items ADD COLUMN ai_car TEXT",
   "CREATE INDEX IF NOT EXISTS idx_news_pub ON news_items(published_at)",
   "CREATE TABLE IF NOT EXISTS app_settings ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now','localtime')) )",
 ];
@@ -150,14 +152,14 @@ export async function summarizeNews(env, limit = 10) {
   const cap = Number(env.NEWS_AI_DAILY) || 300;
   const n = Math.min(limit, cap - used);
   if (n <= 0) return 0;
-  const { results } = await db.prepare(`SELECT url, title, summary, body FROM news_items WHERE (ai_title IS NULL OR COALESCE(ai_ver,0) < 2) AND COALESCE(ai_tries,0) < 2 AND published_at > ?
+  const { results } = await db.prepare(`SELECT url, title, summary, body FROM news_items WHERE (ai_title IS NULL OR COALESCE(ai_ver,0) < 2 OR (COALESCE(ai_ver,0) < 3 AND category = 'supply')) AND COALESCE(ai_tries,0) < 2 AND published_at > ?
     ORDER BY (CASE WHEN title LIKE '%生産%' OR title LIKE '%受注%' OR title LIKE '%オークション%' OR title LIKE '%相場%' OR title LIKE '%新型%' OR title LIKE '%モデルチェンジ%' OR title LIKE '%改良%' THEN 1 ELSE 0 END) DESC, score DESC, published_at DESC LIMIT ?`).bind(new Date(Date.now() - 4 * 864e5).toISOString(), n).all();
   let done = 0;
   for (const it of results) {
     let text = it.body && it.body.length > 120 ? it.body : `${it.summary || ""} ${await articleText(it.url)}`.trim();
     const prompt = `次の自動車ニュースを、中古車販売店の社長が10秒で分かるように日本語でまとめてください。
 必ず次のJSONだけを返してください（説明やコードブロックは不要）：
-{"title":"何が起きたかが一目で分かる見出し（30字以内。車種名・メーカー・数字（台数・金額・時期）を入れ、あおり表現・疑問形・「〜とは？」は使わない）","points":["要点1（40字以内）","要点2（40字以内）","要点3（40字以内、無ければ省略可）"]}
+{"kind":"記事の種類を次から1つ：stop（生産終了・販売終了・受注停止・受付終了・出荷停止・供給停止）／resume（受注再開・販売再開・生産再開）／model（新型・モデルチェンジ・一部改良・新発売）／price（値上げ・価格改定）／market（中古車相場・オークション・販売台数・業界動向）／none（クルマの売り買いや需給に関係ない話題。道路・ラジオ・バイク・レースなど）","car":"主な車種名（例：ライズ、N-BOX。複数あれば最も中心の1つ。無ければ空文字）","title":"何が起きたかが一目で分かる見出し（30字以内。車種名・メーカー・数字（台数・金額・時期）を入れ、あおり表現・疑問形・「〜とは？」は使わない）","points":["要点1（40字以内）","要点2（40字以内）","要点3（40字以内、無ければ省略可）"]}
 見出しの良い例：「日産、軽の新型EVを来春発売へ 価格は約250万円」「テスラ サイバートラック、2027年に生産終了の報道」「USS 10月の出品台数16％増、成約率は低下」
 
 元の見出し：${it.title}
@@ -168,10 +170,10 @@ export async function summarizeNews(env, limit = 10) {
       const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? "");
       const m = raw.match(/\{[\s\S]*\}/);
       const j = m ? JSON.parse(m[0]) : null;
-      if (j && j.title && Array.isArray(j.points)) out = { title: String(j.title).slice(0, 50), points: j.points.map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 3) };
+      if (j && j.title && Array.isArray(j.points)) out = { kind: ["stop", "resume", "model", "price", "market", "none"].includes(j.kind) ? j.kind : "market", car: String(j.car || "").slice(0, 30), title: String(j.title).slice(0, 50), points: j.points.map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 3) };
     } catch {}
     if (out) {
-      await db.prepare("UPDATE news_items SET ai_title = ?, ai_points = ?, ai_ver = 2 WHERE url = ?").bind(out.title, JSON.stringify(out.points), it.url).run();
+      await db.prepare("UPDATE news_items SET ai_title = ?, ai_points = ?, ai_ver = 3, ai_kind = ?, ai_car = ? WHERE url = ?").bind(out.title, JSON.stringify(out.points), out.kind, out.car, it.url).run();
       done++;
     } else await db.prepare("UPDATE news_items SET ai_tries = COALESCE(ai_tries,0) + 1 WHERE url = ?").bind(it.url).run();
     used++;
@@ -186,7 +188,7 @@ export async function handleNews(request, env, url, ctx) {
   if (url.pathname === "/api/news/badge") {
     await ensureNewsSchema(env.DB);
     const since = new Date(Date.now() - 3 * 864e5).toISOString();
-    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM news_items WHERE category = 'supply' AND published_at >= ?").bind(since).first();
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM news_items WHERE category = 'supply' AND COALESCE(ai_kind, '') <> 'none' AND published_at >= ?").bind(since).first();
     return json({ supply: r ? r.n : 0 });
   }
   if (url.pathname !== "/api/news") return null;
@@ -206,7 +208,7 @@ export async function handleNews(request, env, url, ctx) {
   }
   // まとめていない記事があれば、裏で少しずつ AI にまとめさせる（画面は待たない）
   if (ctx?.waitUntil) ctx.waitUntil(summarizeNews(env, 12).catch(() => {}));
-  const { results } = await db.prepare("SELECT url, source, title, summary, image, published_at, category, score, ai_title, ai_points FROM news_items ORDER BY published_at DESC LIMIT 400").all();
+  const { results } = await db.prepare("SELECT url, source, title, summary, image, published_at, category, score, ai_title, ai_points, ai_kind, ai_car FROM news_items ORDER BY published_at DESC LIMIT 400").all();
   for (const r of results) r.ai_points = r.ai_points ? JSON.parse(r.ai_points) : null;
   return json({ items: results, fetched_at: fetched.at, status: fetched.status, sources: NEWS_FEEDS.map(({ id, name, color }) => ({ id, name, color })), categories: NEWS_CATEGORY_LABELS });
 }
