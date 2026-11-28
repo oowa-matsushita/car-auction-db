@@ -394,7 +394,7 @@ async function cachedFetch(request, env, ctx) {
   try {
     if (cacheable && ver !== null && res.ok) {
       const body = await res.clone().text();
-      if (body.length < 900000) ctx.waitUntil(env.DB.prepare("INSERT OR REPLACE INTO api_cache (key, ver, body, created_at) VALUES (?, ?, ?, datetime('now'))").bind(path + url.search, ver, body).run().catch(() => {}));
+      if (body.length < 1800000) ctx.waitUntil(env.DB.prepare("INSERT OR REPLACE INTO api_cache (key, ver, body, created_at) VALUES (?, ?, ?, datetime('now'))").bind(path + url.search, ver, body).run().catch(() => {}));
     } else if (method !== "GET" && res.ok) {
       await bumpDataVer(env.DB);
       // 次に開いたときにすぐ出るよう、よく見る集計を先に作っておく（返事のあとで実行）
