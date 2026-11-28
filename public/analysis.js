@@ -264,7 +264,7 @@ async function loadPurchase() {
   const all = [...new Set([...au.map((x) => x.key), ...Object.keys(dl)])].sort().map((k) => ({ ...(auBy.get(k) || { key: k, n: 0, gross_n: 0, gross_avg: null }), dn: dl[k] || 0 }));
   const list = all.slice(unit === "week" ? -13 : unit === "day" ? -31 : -12);
   const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : unit === "day" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}` : `${Number(x.key.slice(5))}月`;
-  const W = Math.max(520, list.length * (unit === "day" ? 34 : 78)), H = 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
+  const W = Math.max(520, list.length * (unit === "day" ? 34 : 78)), H = unit === "day" ? 268 : 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
   const maxN = Math.max(...list.map((x) => x.n + x.dn), 1);
   const gv = list.map((x) => x.gross_avg).filter((v) => v != null), gMax = Math.max(...gv, 1), gMin = Math.min(0, ...gv);
   const yN = (v) => T + ih - (v / maxN) * ih, yG = (v) => T + ih - ((v - gMin) / (gMax - gMin || 1)) * ih;
@@ -274,10 +274,11 @@ async function loadPurchase() {
   list.forEach((x, i) => {
     const cx = L + bw * i + bw / 2, bh = (x.n / maxN) * ih;
     const dh = (x.dn / maxN) * ih;
-    g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n)}" width="${bw * 0.6}" height="${bh}" rx="3" fill="#10b8c4" fill-opacity=".75"><title>${lab(x)}：オークション ${x.n}台／ディーラー ${x.dn}台／設定台粗利の平均 ${x.gross_avg == null ? "—" : x.gross_avg.toFixed(1) + "万円"}（${x.gross_n}台で計算）</title></rect>`;
+    g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n)}" width="${bw * 0.6}" height="${bh}" rx="3" fill="#10b8c4" fill-opacity=".75"><title>${lab(x)}：オークション ${x.n}台／ディーラー ${x.dn}台／設定台粗利の平均 ${x.gross_avg == null ? "—" : x.gross_avg.toFixed(1) + "万円"}／合計 ${x.gross_sum == null ? "—" : Math.round(x.gross_sum) + "万円"}（${x.gross_n}台で計算）</title></rect>`;
     if (x.dn) g += `<rect x="${cx - bw * 0.3}" y="${yN(x.n + x.dn)}" width="${bw * 0.6}" height="${dh}" rx="3" fill="#8e63d8" fill-opacity=".8"><title>${lab(x)}：ディーラー仕入れ ${x.dn}台</title></rect>`;
     g += `<text x="${cx}" y="${yN(x.n + x.dn) - 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0e8d97">${x.n + x.dn}</text>`;
     g += `<text x="${cx}" y="${H - 24}" text-anchor="middle" font-size="11" fill="#334">${lab(x)}</text>`;
+    if (unit === "day") g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="10" font-weight="700" fill="${x.gross_sum == null ? "#aab" : x.gross_sum < 0 ? "#c62828" : "#c25a00"}">${x.gross_sum == null ? "—" : Math.round(x.gross_sum) + "万"}</text>`;
   });
   const pts = list.map((x, i) => (x.gross_avg == null ? null : [L + bw * i + bw / 2, yG(x.gross_avg), x.gross_avg])).filter(Boolean);
   if (pts.length) {
@@ -290,7 +291,7 @@ async function loadPurchase() {
       <span class="tv-note">直近${list.length}${unit === "week" ? "週" : unit === "day" ? "日" : "か月"}：仕入 ${tot}台（オークション ${totA}・ディーラー ${totD}）・設定台粗利の平均 ${gN ? (gAll / gN).toFixed(1) + "万円" : "—"}</span></div>
     <div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 520)}px">${g}</svg></div>
     <div class="tv-note"><span class="an-key" style="background:#10b8c4"></span>オークション仕入（仕入れ台帳・左の目盛り）　<span class="an-key" style="background:#8e63d8"></span>ディーラー仕入（左の目盛り・積み上げ）　<span class="an-key" style="background:#e8761f"></span>設定台粗利の平均（右の目盛り・万円）<br>
-      オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（2026年8月以降だけ表示。今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;
+      オークション＝仕入れ台帳の、落札・成約した車（流れ・下見は除く）。ディーラー仕入＝在庫の一覧から、在庫Noの日付で数えた台数（2026年8月以降だけ表示。今の在庫に残っている車の分なので、すでに売れた車は入っていません）。設定台粗利＝予定車両価格 − 落札金額×1.1（台帳の「予定−落札×1.1」と同じ。販売後の実際の粗利ではなく、仕入れた時点に設定した見込み）。日ごとは、日付の下の数字がその日の設定台粗利の合計（万円）です。設定台粗利の平均は、オークション仕入だけの数字です（予定価格が空欄の車は入りません）。週は月曜〜日曜で、開催日で数えます。</div>`;
   box.querySelectorAll("[data-u]").forEach((b) => (b.onclick = () => { an.purUnit = b.dataset.u; try { localStorage.setItem("anPurUnit", an.purUnit); } catch {} loadPurchase(); }));
 }
 

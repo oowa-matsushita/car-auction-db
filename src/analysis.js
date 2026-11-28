@@ -194,7 +194,7 @@ export async function handleAnalysis(request, env, url) {
         x.n++; x.bid += r.bid; if (g != null) { x.gn++; x.gs += g; }
       }
     }
-    const fin = (m) => Object.values(m).sort((a, b) => a.key.localeCompare(b.key)).map((x) => ({ key: x.key, n: x.n, gross_n: x.gn, gross_avg: x.gn ? x.gs / x.gn : null, bid_avg: x.n ? x.bid / x.n : null }));
+    const fin = (m) => Object.values(m).sort((a, b) => a.key.localeCompare(b.key)).map((x) => ({ key: x.key, n: x.n, gross_n: x.gn, gross_sum: x.gn ? x.gs : null, gross_avg: x.gn ? x.gs / x.gn : null, bid_avg: x.n ? x.bid / x.n : null }));
     // ディーラー仕入れ（台数だけ。在庫に残っている車の分）
     const dm = {}, dw = {}, dd = {};
     try {
