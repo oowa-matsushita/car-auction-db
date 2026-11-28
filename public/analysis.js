@@ -152,16 +152,31 @@ function drawAnalysis() {
   const up = [...trend].sort((a, b) => b.diff - a.diff).filter((x) => x.diff > 0).slice(0, 8);
   const down = [...trend].sort((a, b) => a.diff - b.diff).filter((x) => x.diff < 0).slice(0, 8);
 
+  // 「わかったこと」は、選んだ期間にかかわらず、直近3か月の数字で出す
+  const tipM = [...new Set(days.map((x) => x.date.slice(0, 7)))].sort().slice(-3);
+  const d3 = days.filter((x) => tipM.includes(x.date.slice(0, 7)));
+  const wkAvg3 = avg(d3.filter((x) => !x.off), (x) => x.sold), offAvg3 = avg(d3.filter((x) => x.off), (x) => x.sold);
+  const dowItems3 = [1, 2, 3, 4, 5, 6, 0].map((w) => { const a = d3.filter((x) => x.dow === w && !(x.off && w >= 1 && w <= 5)); return { label: AN_DOW[w], value: avg(a, (x) => x.sold) }; });
+  const hol3 = d3.filter((x) => x.off && x.dow >= 1 && x.dow <= 5);
+  if (hol3.length) dowItems3.push({ label: "祝日", value: avg(hol3, (x) => x.sold) });
+  const rainyIdx3 = idxOf(d3.filter((x) => x.rain != null && x.rain >= 5));
+  const after3 = days.filter((x, i) => i > 0 && tipM.includes(x.date.slice(0, 7)) && days[i - 1].rain != null && days[i - 1].rain >= 10);
+  const afterIdx3 = idxOf(after3);
+  const tempItems3 = tempBins.map(([l, f]) => { const a = d3.filter((x) => x.temp != null && f(x.temp)); return { label: l, value: a.length ? idxOf(a) : null, sub: `${a.length}日` }; }).filter((x) => x.sub !== "0日");
+  const hasWx3 = d3.some((x) => x.rain != null);
+  const models3 = d.models.map((m) => ({ ...m, sold3: tipM.reduce((q, mo) => q + (m.by_month[mo] || 0), 0) })).sort((a, b) => b.sold3 - a.sold3);
+  const prev3 = tipM.filter((m) => m < trendMonth);
+  const up3 = models3.filter((m) => m.sold3 >= 3 && prev3.length).map((m) => { const pAvg = prev3.reduce((q, mo) => q + (m.by_month[mo] || 0), 0) / prev3.length, now = m.by_month[trendMonth] || 0; return { ...m, now, pAvg, diff: now - pAvg }; }).sort((a, b) => b.diff - a.diff).filter((x) => x.diff > 0).slice(0, 8);
   // 気づき（文章）
   const tips = [];
-  if (wkAvg && offAvg) tips.push(`土日祝は1日 <b>${offAvg.toFixed(1)}台</b>、平日は <b>${wkAvg.toFixed(1)}台</b>。土日祝は平日の <b>${(offAvg / wkAvg).toFixed(1)}倍</b> 売れています。`);
-  const best = [...dowItems].sort((a, b) => (b.value ?? 0) - (a.value ?? 0))[0];
-  const worst = [...dowItems].filter((x) => x.label !== "祝日").sort((a, b) => (a.value ?? 99) - (b.value ?? 99))[0];
+  if (wkAvg3 && offAvg3) tips.push(`土日祝は1日 <b>${offAvg3.toFixed(1)}台</b>、平日は <b>${wkAvg3.toFixed(1)}台</b>。土日祝は平日の <b>${(offAvg3 / wkAvg3).toFixed(1)}倍</b> 売れています。`);
+  const best = [...dowItems3].sort((a, b) => (b.value ?? 0) - (a.value ?? 0))[0];
+  const worst = [...dowItems3].filter((x) => x.label !== "祝日").sort((a, b) => (a.value ?? 99) - (b.value ?? 99))[0];
   if (best && worst) tips.push(`いちばん売れるのは <b>${best.label}曜日</b>（1日${best.value.toFixed(1)}台）、いちばん少ないのは <b>${worst.label}曜日</b>（${worst.value.toFixed(1)}台）。`.replace("祝日曜日", "祝日"));
-  if (hasWx && rainyIdx != null) tips.push(`雨（5mm以上）の日は、同じ月・同じ曜日の種類の日と比べて <b>${pctS(rainyIdx)}</b>。${afterIdx != null && after.length >= 3 ? `大きな雨（10mm以上）の次の日は <b>${pctS(afterIdx)}</b>（${after.length}日）。` : ""}`);
-  if (hasWx) { const t = tempItems.filter((x) => x.value != null).sort((a, b) => b.value - a.value); if (t.length >= 2) tips.push(`気温では <b>${t[0].label}</b> の日がいちばん売れ（${pctS(t[0].value)}）、<b>${t[t.length - 1].label}</b> の日がいちばん売れません（${pctS(t[t.length - 1].value)}）。`); }
-  if (models[0]) tips.push(`いちばん売れている車は <b>${h(models[0].name)}</b>（${models[0].sold}台）。${up[0] ? `${monthLabel(trendMonth)}にいちばん伸びたのは <b>${h(up[0].name)}</b>（${up[0].now}台、それまでの月平均${up[0].pAvg.toFixed(1)}台）。` : ""}`);
-  if (!hasWx) tips.push("天気のデータがまだありません。気象庁の「過去の気象データ」のCSVを送っていただければ取り込みます。");
+  if (hasWx3 && rainyIdx3 != null) tips.push(`雨（5mm以上）の日は、同じ月・同じ曜日の種類の日と比べて <b>${pctS(rainyIdx3)}</b>。${afterIdx3 != null && after3.length >= 3 ? `大きな雨（10mm以上）の次の日は <b>${pctS(afterIdx3)}</b>（${after3.length}日）。` : ""}`);
+  if (hasWx3) { const t = tempItems3.filter((x) => x.value != null).sort((a, b) => b.value - a.value); if (t.length >= 2) tips.push(`気温では <b>${t[0].label}</b> の日がいちばん売れ（${pctS(t[0].value)}）、<b>${t[t.length - 1].label}</b> の日がいちばん売れません（${pctS(t[t.length - 1].value)}）。`); }
+  if (models3[0]) tips.push(`いちばん売れている車は <b>${h(models3[0].name)}</b>（${models3[0].sold3}台）。${up3[0] ? `${monthLabel(trendMonth)}にいちばん伸びたのは <b>${h(up3[0].name)}</b>（${up3[0].now}台、それまでの月平均${up3[0].pAvg.toFixed(1)}台）。` : ""}`);
+  if (!hasWx3) tips.push("天気のデータがまだありません。気象庁の「過去の気象データ」のCSVを送っていただければ取り込みます。");
 
   // 日別の推移（棒：販売台数、上から下がる青：雨量）
   const W = Math.max(600, days.length * 6), H = 190, pT = 26, pB = 26, ih = H - pT - pB, bw = W / days.length;
@@ -205,7 +220,7 @@ function drawAnalysis() {
   $("anBody").innerHTML = `
     <div class="an-card an-pur" id="anPur"><h3>📦 仕入台数と設定台粗利</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card an-mon"><h3>📅 直近3か月（月ごと）</h3>${monthKpi}</div>
-    <div class="an-card an-tips"><h3>💡 わかったこと</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
+    <div class="an-card an-tips"><h3>💡 わかったこと（直近3か月）</h3><ul>${tips.map((t) => `<li>${t}</li>`).join("")}</ul></div>
     <div class="an-card tg" id="anTarget"><h3>🎯 今月の小売目標</h3><div class="tv-note">読み込み中…</div></div>
     <div class="an-card tg" id="anPast"><h3>📜 過去の実績（月を選んで見る）</h3><div class="tv-note">読み込み中…</div></div>
     ${adv ? `<div class="an-card adv"><h3>🤖 AI分析 <span class="tv-note">（売れ筋の在庫と、価格を見直したい車種）</span></h3>${adv.html}</div>` : ""}
