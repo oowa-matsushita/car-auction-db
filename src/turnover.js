@@ -13,6 +13,9 @@ export const TURNOVER_ADDED_COLUMNS = [
   "ALTER TABLE sales_items ADD COLUMN cost INTEGER",
   "ALTER TABLE sales_items ADD COLUMN is_new INTEGER DEFAULT 0",
   "ALTER TABLE sales_items ADD COLUMN staff TEXT",
+  "ALTER TABLE sales_items ADD COLUMN grade TEXT",
+  "ALTER TABLE sales_items ADD COLUMN mileage INTEGER",
+  "ALTER TABLE sales_items ADD COLUMN color TEXT",
   "ALTER TABLE inv_items ADD COLUMN grade TEXT",
 ];
 
@@ -77,6 +80,9 @@ const SALES_FIELDS = {
   customer: ["顧客名"],
   fees: ["販売諸費用計"],
   staff: ["担当者名", "担当者", "営業担当"],
+  grade: ["グレード"],
+  mileage: ["走行距離"],
+  color: ["ボディー色"],
   cost: ["本体価格原価", "車輌本体原価", "車両本体原価"],
   discount: ["車両本体値引", "本体値引", "値引"],
   sales_amount: ["売上高"],
@@ -152,6 +158,7 @@ function parseSales(rows) {
       car_name: clean(get("car_name")), price: toInt(get("price")), discount: toInt(get("discount")), sales_amount: toInt(get("sales_amount")),
       stock_no: clean(get("stock_no")), chassis_no: clean(get("chassis_no")),
       customer: clean(get("customer")), fees: pos.fees ? toInt(get("fees")) : null, staff: pos.staff ? clean(get("staff")) || null : undefined,
+      grade: pos.grade ? clean(get("grade")) || null : undefined, mileage: pos.mileage ? toInt(get("mileage")) : undefined, color: pos.color ? clean(get("color")) || null : undefined,
       cost: pos.cost ? toInt(get("cost")) || null : null,
     });
   }
@@ -337,15 +344,15 @@ export async function handleTurnover(request, env, url) {
           for (const r of list0) if (have.has(r.slip_no) && r.staff) stmts.push(db.prepare("UPDATE sales_items SET staff = ? WHERE month = ? AND slip_no = ? AND is_new = 1").bind(r.staff, mo, r.slip_no));
         }
         // 担当者の列が無いファイルで取り込み直しても、すでに入っている担当者は消さない
-        if (list.some((r) => r.staff === undefined)) {
-          const { results: sf } = await db.prepare("SELECT slip_no, staff FROM sales_items WHERE month = ? AND staff IS NOT NULL").bind(mo).all();
-          const sm = new Map(sf.map((x) => [x.slip_no, x.staff]));
-          for (const r of list) if (r.staff === undefined) r.staff = sm.get(r.slip_no) || null;
+        if (list.some((r) => r.staff === undefined || r.mileage === undefined)) {
+          const { results: sf } = await db.prepare("SELECT slip_no, staff, grade, mileage, color FROM sales_items WHERE month = ?").bind(mo).all();
+          const sm = new Map(sf.map((x) => [x.slip_no, x]));
+          for (const r of list) { const o = sm.get(r.slip_no) || {}; if (r.staff === undefined) r.staff = o.staff || null; if (r.grade === undefined) r.grade = o.grade || null; if (r.mileage === undefined) r.mileage = o.mileage ?? null; if (r.color === undefined) r.color = o.color || null; }
         }
         stmts.push(db.prepare("DELETE FROM sales_items WHERE month = ? AND COALESCE(is_new, 0) = ?").bind(mo, isNew));
         for (const r of list) {
-          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost, is_new, staff) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost, isNew, r.staff ?? null));
+          stmts.push(db.prepare("INSERT INTO sales_items (month, slip_no, contract_date, delivery_date, car_name, price, discount, sales_amount, filename, stock_no, chassis_no, customer, channel, cost, is_new, staff, grade, mileage, color) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(mo, r.slip_no, r.contract_date, r.delivery_date, r.car_name, r.price, r.discount, r.sales_amount, filename, r.stock_no, r.chassis_no, r.customer || null, salesChannel(r), r.cost, isNew, r.staff ?? null, r.grade ?? null, r.mileage ?? null, r.color ?? null));
         }
       }
       for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));

@@ -180,6 +180,53 @@ export async function handleAnalysis(request, env, url) {
     return json({ ok: true, count: rows.length });
   }
 
+  // 価格改定（売値の見直し）の記録と、その後に売れたかの分析
+  const PC_SQL = "CREATE TABLE IF NOT EXISTS price_changes ( id INTEGER PRIMARY KEY AUTOINCREMENT, rev_date TEXT, name TEXT, color TEXT, year INTEGER, month INTEGER, mileage INTEGER, old_price REAL, new_price REAL, note TEXT )";
+  if (path === "/api/price-changes" && method === "POST") {
+    await db.prepare(PC_SQL).run();
+    const b = await request.json().catch(() => ({}));
+    const list = (b.rows || []).filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") && r.name && Number(r.old) > 0 && Number(r.new) > 0);
+    const st = [db.prepare("DELETE FROM price_changes")];
+    for (const r of list) st.push(db.prepare("INSERT INTO price_changes (rev_date, name, color, year, month, mileage, old_price, new_price, note) VALUES (?,?,?,?,?,?,?,?,?)").bind(r.date, String(r.name), r.color || null, r.year ?? null, r.month ?? null, r.mileage ?? null, Number(r.old), Number(r.new), r.note || null));
+    for (let i = 0; i < st.length; i += 100) await db.batch(st.slice(i, i + 100));
+    return json({ ok: true, count: list.length, dates: [...new Set(list.map((r) => r.date))].length });
+  }
+  if (path === "/api/price-effect" && method === "GET") {
+    await db.prepare(PC_SQL).run();
+    const { results: sales } = await db.prepare("SELECT contract_date AS d, car_name, color, mileage, price, discount, channel FROM sales_items WHERE mileage IS NOT NULL AND COALESCE(channel,'') <> 'exclude' ORDER BY contract_date").all();
+    if (!sales.length) return json({ error: "走行距離つきの販売データがありません" }, 400);
+    const from = sales[0].d, through = sales[sales.length - 1].d;
+    const { results: ch } = await db.prepare("SELECT * FROM price_changes WHERE rev_date >= ? ORDER BY rev_date, id").bind(from).all();
+    const nk = (s) => String(s || "").normalize("NFKC");
+    const first = (n) => nk(n).split(/[\s\u3000]/)[0];
+    const colKey = (c) => nk(c).replace(/[ⅠⅡⅢ0-9２]/g, "").replace(/[()（）★\s]/g, "").slice(0, 1);
+    const sk = sales.map((s) => ({ ...s, key: modelKey(s.car_name), ck: colKey(s.color) }));
+    const byKey = new Map(); sk.forEach((s, i) => { s.i = i; (byKey.get(s.key) || byKey.set(s.key, []).get(s.key)).push(s); });
+    const owner = new Map(), idOf = new Map(); // 売れた1台は、1台の車にだけ結びつける
+    const day = (d) => Math.round(Date.parse(d + "T00:00:00Z") / 864e5);
+    const rows = [];
+    for (const c of ch) {
+      const key = modelKey(first(c.name)), cands = byKey.get(key) || [];
+      const id = [c.name, c.color, c.year, c.mileage].join("|");
+      const exact = c.mileage >= 100;
+      const hit = cands.find((s) => s.d >= c.rev_date && (!owner.has(s.i) || owner.get(s.i) === id) && (exact ? Math.abs((s.mileage || 0) - c.mileage) <= 5 : (s.mileage || 0) < 100 && (!c.color || !s.ck || colKey(c.color) === s.ck)));
+      if (hit) owner.set(hit.i, id);
+      const cut = c.old_price - c.new_price;
+      rows.push({ date: c.rev_date, name: c.name, color: c.color, year: c.year, mileage: c.mileage, old: c.old_price, new: c.new_price, cut, pct: cut / c.old_price, sold: hit ? hit.d : null, days: hit ? day(hit.d) - day(c.rev_date) : null, sale_price: hit ? Math.round(((hit.price || 0) - Math.abs(hit.discount || 0)) / 1000) / 10 : null, match: hit ? (exact ? "走行距離で一致" : "車種・色で一致（確度やや低）") : null });
+    }
+    const H = [7, 14, 30];
+    const sum = (list) => {
+      const o = { n: list.length, avg_cut: list.length ? list.reduce((q, r) => q + r.cut, 0) / list.length : 0 };
+      for (const h of H) { const el = list.filter((r) => day(through) - day(r.date) >= h); o["n" + h] = el.length; o["sold" + h] = el.filter((r) => r.days != null && r.days <= h).length; }
+      const sd = list.filter((r) => r.days != null); o.avg_days = sd.length ? sd.reduce((q, r) => q + r.days, 0) / sd.length : null; o.sold_all = sd.length;
+      return o;
+    };
+    const down = rows.filter((r) => r.cut > 0), up = rows.filter((r) => r.cut < 0);
+    const bk = [["〜2万円", (r) => r.cut <= 2], ["3〜4万円", (r) => r.cut > 2 && r.cut < 5], ["5〜9万円", (r) => r.cut >= 5 && r.cut < 10], ["10万円以上", (r) => r.cut >= 10]];
+    const dates = [...new Set(rows.map((r) => r.date))].sort();
+    return json({ from, through, total: rows.length, down: sum(down), up: sum(up), buckets: bk.map(([label, f]) => ({ label, ...sum(down.filter(f)) })), by_date: dates.map((d) => ({ date: d, ...sum(rows.filter((r) => r.date === d && r.cut > 0)) })), rows: rows.filter((r) => r.date >= dates[Math.max(0, dates.length - 2)]) });
+  }
+
   // 仕入れ台帳から、月ごと・週ごとの仕入れ台数と台粗利（予定車両価格 − 落札×1.1。台帳の「予定−落札×1.1」と同じ）の平均
   if (path === "/api/purchases" && method === "GET") {
     const { results } = await db.prepare("SELECT auction_date AS d, bid_price_man AS bid, planned_price_man AS plan, result FROM vehicles WHERE auction_date IS NOT NULL AND bid_price_man IS NOT NULL").all();
