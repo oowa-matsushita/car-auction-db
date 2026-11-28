@@ -358,6 +358,50 @@ async function processPage(env, msg) {
 }
 
 // ---- ルーティング -------------------------------------------------------------
+// ---- 重い集計の結果を、データが変わるまで取っておく（表示を速くする） ----
+// データを書き換える操作（取り込み・編集・設定の保存・読み取りの完了）のたびに data_ver を新しくする。
+// data_ver が変わっていなければ、前に作った結果をそのまま返す（最長10分）
+const CACHE_PATHS = [/^\/api\/turnover/, /^\/api\/analysis$/, /^\/api\/carsensor$/, /^\/api\/purchases$/, /^\/api\/performance/, /^\/api\/target$/, /^\/api\/review$/];
+let cacheTableReady = false;
+async function bumpDataVer(db) {
+  await db.prepare("INSERT INTO app_settings (key, value) VALUES ('data_ver', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(Date.now()) + Math.random().toString(36).slice(2, 6)).run();
+}
+async function cachedFetch(request, env, ctx) {
+  const url = new URL(request.url), path = url.pathname, method = request.method;
+  if (!path.startsWith("/api/")) return handleRequest(request, env, ctx);
+  const denied = await checkAuth(request, env, url);
+  if (denied) return denied;
+  const cacheable = method === "GET" && CACHE_PATHS.some((re) => re.test(path));
+  let ver = null;
+  if (cacheable) {
+    try {
+      if (!cacheTableReady) {
+        await env.DB.batch([
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS app_settings ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now','localtime')) )"),
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS api_cache ( key TEXT PRIMARY KEY, ver TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')) )"),
+        ]);
+        cacheTableReady = true;
+      }
+      const row = await env.DB.prepare(
+        `SELECT COALESCE((SELECT value FROM app_settings WHERE key='data_ver'), '0') AS ver,
+                (SELECT body FROM api_cache WHERE key = ?1 AND ver = COALESCE((SELECT value FROM app_settings WHERE key='data_ver'), '0') AND created_at > datetime('now','-10 minutes')) AS body`
+      ).bind(path + url.search).first();
+      ver = row ? row.ver : null;
+      if (row && row.body) return new Response(row.body, { headers: { "content-type": "application/json; charset=utf-8", "x-cache": "hit" } });
+    } catch { ver = null; }
+  }
+  const res = await handleRequest(request, env, ctx);
+  try {
+    if (cacheable && ver !== null && res.ok) {
+      const body = await res.clone().text();
+      if (body.length < 900000) ctx.waitUntil(env.DB.prepare("INSERT OR REPLACE INTO api_cache (key, ver, body, created_at) VALUES (?, ?, ?, datetime('now'))").bind(path + url.search, ver, body).run().catch(() => {}));
+    } else if (method !== "GET" && res.ok) {
+      await bumpDataVer(env.DB);
+    }
+  } catch {}
+  return res;
+}
+
 export default {
   async scheduled(event, env) {
     await ensureSchema(env.DB);
@@ -370,9 +414,13 @@ export default {
   async queue(batch, env) {
     await ensureSchema(env.DB);
     await Promise.all(batch.messages.map((m) => processPage(env, m)));
+    await bumpDataVer(env.DB).catch(() => {});
   },
 
-  async fetch(request, env, ctx) {
+  async fetch(request, env, ctx) { return cachedFetch(request, env, ctx); },
+};
+
+async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
     const denied = await checkAuth(request, env, url);
     if (denied) return denied;
@@ -664,5 +712,4 @@ export default {
       console.error(e);
       return json({ error: japaneseError(e) }, 500);
     }
-  },
-};
+}
