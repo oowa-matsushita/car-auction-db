@@ -593,7 +593,7 @@ function ledgerPopHtml(car) {
   const key = modelKeyC(car);
   const m = tvHistory?.models[key];
   if (!m) return `<b>${h(modelNameC(car) || car || "（車名なし）")}</b><div class="tv-note" style="margin-top:4px">この車種は、月初在庫・販売データに見つかりません。</div>`;
-  const pts = modelPoints(key);
+  let pts = modelPoints(key);
   let last, label, fc = null;
   if (wxCfg.hover === "avg3") {
     // 直近3か月（今月を除く）の平均：回転率＝販売合計÷月初在庫合計、台粗利＝販売台数で重み付けした平均
@@ -603,6 +603,7 @@ function ledgerPopHtml(car) {
     const op = ps.reduce((s, p) => s + (p.opening || 0), 0), so = ps.reduce((s, p) => s + (p.sold || 0), 0);
     const gw = ps.filter((p) => p.gross_avg != null && p.sold), gs = gw.reduce((s, p) => s + p.sold, 0);
     last = ps.length ? { month: all[all.length - 1], opening: op, sold: so, rate: op ? so / op : null, gross_avg: gs ? Math.round(gw.reduce((s, p) => s + p.gross_avg * p.sold, 0) / gs) : null } : null;
+    pts = ps; // グラフも、同じ直近3か月（今月を除く）だけを出す
     label = all.length ? `直近3か月（${Number(all[0].slice(5))}〜${Number(all[all.length - 1].slice(5))}月）の平均` : "";
   } else {
     last = [...pts].reverse().find((p) => p.rate != null || p.sold) || pts[pts.length - 1];
