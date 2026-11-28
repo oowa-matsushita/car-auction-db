@@ -28,6 +28,8 @@ export const NEWS_FEEDS = [
   { id: "autocar", name: "AUTOCAR", url: "https://www.autocar.jp/feed", color: "#00695c" },
   { id: "motorcars", name: "MOTOR CARS", url: "https://motorcars.jp/feed", color: "#455a64" },
   { id: "carsmeet", name: "Carsmeet", url: "https://carsmeet.jp/feed/", color: "#ad1457" },
+  { id: "nissan", name: "日産公式", url: "https://global.nissannews.com/ja-JP/rss", color: "#c3002f" },
+  { id: "daihatsu", name: "ダイハツ公式", url: "https://www.daihatsu.com/jp/rss.xml", color: "#e60012" },
   { id: "carwatch", name: "Car Watch", url: "https://car.watch.impress.co.jp/data/rss/1.0/car/feed.rdf", color: "#00838f" },
 ];
 
@@ -61,7 +63,7 @@ export function parseFeed(xml, feed) {
   const out = [];
   for (const m of xml.matchAll(/<item[\s>][\s\S]*?<\/item>/gi)) {
     const it = m[0];
-    const title = strip(tag(it, "title"));
+    const rawTitle = strip(tag(it, "title")), title = feed.id === "daihatsu" ? rawTitle.replace(/^\d{4}-\d{2}-\d{2}\s+(\[[^\]]*\]\s*)?/, "") : rawTitle;
     let link = tag(it, "link") || (it.match(/rdf:about="([^"]+)"/) || [])[1] || "";
     link = decode(link).trim();
     if (!title || !/^https?:\/\//.test(link)) continue;
@@ -73,7 +75,9 @@ export function parseFeed(xml, feed) {
     // 要約用の本文（RSS に本文があるメディアだけ。最大1500字）
     const body = strip(tag(it, "content:encoded") || descRaw).slice(0, 1500);
     if (summary.length > 120) summary = summary.slice(0, 120) + "…";
-    const d = new Date(tag(it, "pubDate") || tag(it, "dc:date") || Date.now());
+    // 日付のないフィード（ダイハツ）は、見出しの先頭の「2026-11-27」を使う
+    const tm = rawTitle.match(/^(\d{4})-(\d{2})-(\d{2})\s/);
+    const d = new Date(tag(it, "pubDate") || tag(it, "dc:date") || (tm ? `${tm[1]}-${tm[2]}-${tm[3]}T09:00:00+09:00` : Date.now()));
     out.push({
       url: link, source: feed.id, title: t, summary, image: /^https:\/\//.test(img) ? img : "",
       published_at: (isNaN(d) ? new Date() : d).toISOString(), category: categorize(t + " " + summary), body, score: interestScore(t + " " + body),
