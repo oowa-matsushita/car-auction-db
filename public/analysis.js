@@ -263,8 +263,8 @@ async function loadPurchase() {
   const auBy = new Map(au.map((x) => [x.key, x]));
   const all = [...new Set([...au.map((x) => x.key), ...Object.keys(dl)])].sort().map((k) => ({ ...(auBy.get(k) || { key: k, n: 0, gross_n: 0, gross_avg: null }), dn: dl[k] || 0 }));
   const list = all.slice(unit === "week" ? -13 : unit === "day" ? -31 : -12);
-  const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : unit === "day" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}` : `${Number(x.key.slice(5))}月`;
-  const W = Math.max(520, list.length * (unit === "day" ? 34 : 78)), H = unit === "day" ? 268 : 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
+  const lab = (x) => unit === "week" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}〜` : unit === "day" ? `${Number(x.key.slice(5, 7))}/${Number(x.key.slice(8))}（${AN_DOW[new Date(x.key + "T00:00:00Z").getUTCDay()]}）` : `${Number(x.key.slice(5))}月`;
+  const W = Math.max(520, list.length * (unit === "day" ? 40 : 78)), H = unit === "day" ? 268 : 250, L = 46, R = 52, T = 28, B = 46, iw = W - L - R, ih = H - T - B, bw = iw / list.length;
   const maxN = Math.max(...list.map((x) => x.n + x.dn), 1);
   const gv = list.map((x) => x.gross_avg).filter((v) => v != null), gMax = Math.max(...gv, 1), gMin = Math.min(0, ...gv);
   const yN = (v) => T + ih - (v / maxN) * ih, yG = (v) => T + ih - ((v - gMin) / (gMax - gMin || 1)) * ih;
