@@ -21,6 +21,11 @@ export const NEWS_FEEDS = [
   { id: "bestcar", name: "ベストカーWeb", url: "https://bestcarweb.jp/feed", color: "#ef6c00" },
   { id: "nikkan", name: "日刊自動車新聞", url: "https://www.netdenjd.com/feed", color: "#6a1b9a" },
   { id: "toyota", name: "トヨタ公式", url: "https://global.toyota/export/jp/allnews_rss.xml", color: "#eb0a1e" },
+  { id: "autoprove", name: "AUTOPROVE", url: "https://autoprove.net/feed/", color: "#37474f" },
+  { id: "motorfan", name: "Motor-Fan", url: "https://motor-fan.jp/feed/", color: "#5d4037" },
+  { id: "autocar", name: "AUTOCAR", url: "https://www.autocar.jp/feed", color: "#00695c" },
+  { id: "motorcars", name: "MOTOR CARS", url: "https://motorcars.jp/feed", color: "#455a64" },
+  { id: "carsmeet", name: "Carsmeet", url: "https://carsmeet.jp/feed/", color: "#ad1457" },
   { id: "carwatch", name: "Car Watch", url: "https://car.watch.impress.co.jp/data/rss/1.0/car/feed.rdf", color: "#00838f" },
 ];
 
@@ -82,7 +87,7 @@ export async function refreshNews(env) {
     try {
       const res = await fetch(f.url, { headers: { "user-agent": "Mozilla/5.0 (compatible; MMS-news/1.0)", accept: "application/rss+xml, application/xml, text/xml" }, cf: { cacheTtl: 300 } });
       if (!res.ok) return { id: f.id, ok: false, error: `HTTP ${res.status}` };
-      const items = parseFeed(await res.text(), f);
+      const items = parseFeed(await res.text(), f).slice(0, 40);
       return { id: f.id, ok: true, items };
     } catch (e) { return { id: f.id, ok: false, error: String(e?.message || e) }; }
   }));
@@ -176,7 +181,15 @@ export async function summarizeNews(env, limit = 10) {
 }
 
 export async function handleNews(request, env, url, ctx) {
-  if (url.pathname !== "/api/news" || request.method !== "GET") return null;
+  if (request.method !== "GET") return null;
+  // タブのバッジ用：直近3日の「需給（生産・受注）」の記事の数
+  if (url.pathname === "/api/news/badge") {
+    await ensureNewsSchema(env.DB);
+    const since = new Date(Date.now() - 3 * 864e5).toISOString();
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM news_items WHERE category = 'supply' AND published_at >= ?").bind(since).first();
+    return json({ supply: r ? r.n : 0 });
+  }
+  if (url.pathname !== "/api/news") return null;
   const db = env.DB;
   await ensureNewsSchema(db);
   const meta = await db.prepare("SELECT value FROM app_settings WHERE key = 'news_fetched'").first();

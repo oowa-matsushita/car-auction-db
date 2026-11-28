@@ -362,7 +362,7 @@ async function processPage(env, msg) {
 // データを書き換える操作（取り込み・編集・設定の保存・読み取りの完了）のたびに data_ver を新しくする。
 // data_ver が変わっていなければ、前に作った結果をそのまま返す（最長10分）
 const CACHE_PATHS = [/^\/api\/turnover/, /^\/api\/analysis$/, /^\/api\/carsensor$/, /^\/api\/purchases$/, /^\/api\/performance/, /^\/api\/target$/, /^\/api\/review$/];
-const CODE_VER = "2026-11-28b"; // 画面や集計の中身を変えたときは、この印も変えて、古い保存結果を使わないようにする
+const CODE_VER = "2026-11-28c"; // 画面や集計の中身を変えたときは、この印も変えて、古い保存結果を使わないようにする
 let cacheTableReady = false;
 async function bumpDataVer(db) {
   await db.prepare("INSERT INTO app_settings (key, value) VALUES ('data_ver', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(Date.now()) + Math.random().toString(36).slice(2, 6)).run();
@@ -687,7 +687,7 @@ async function handleRequest(request, env, ctx) {
       }
 
       // 自動車ニュース
-      if (path === "/api/news") {
+      if (path === "/api/news" || path === "/api/news/badge") {
         const res = await handleNews(request, env, url, ctx);
         if (res) return res;
       }

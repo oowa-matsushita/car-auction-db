@@ -92,3 +92,6 @@ $("nwQ").addEventListener("input", drawNews);
 $("nwStock").addEventListener("change", drawNews);
 $("nwReload").onclick = () => loadNews(true);
 if (!$("tab-news").hidden) loadNews();
+
+// タブのバッジ：直近3日の「生産中止・受注停止」などの記事の数（開いたあとも見えるように数字だけ出す）
+fetch("/api/news/badge").then((r) => r.json()).then((d) => { const b = document.getElementById("nwBadge"); if (b && d.supply) { b.textContent = d.supply; b.title = "直近3日の、生産・受注（需給）に関するニュース"; } }).catch(() => {});
