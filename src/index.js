@@ -56,11 +56,13 @@ const CSV_COLS = [
 function normInspection(v) {
   const s = String(v ?? "").normalize("NFKC").replace(/\s+/g, "");
   if (!s) return null;
-  const m = s.match(/^(?:R|令和)?0*(\d{1,2})(?:年|\.|\/|-)0*(\d{1,2})月?(?:\d{1,2}日?)?$/i);
+  const m = s.match(/^(?:R|令和)?0*(\d{1,2})(?:年|\.|\/|-)0*(\d{1,2})(?:月(?:0*(\d{1,2})日?)?|[.\/-]0*(\d{1,2}))?$/i);
   if (!m) return null;
   const y = Number(m[1]), mo = Number(m[2]);
   if (!(y >= 1 && y <= 30 && mo >= 1 && mo <= 12)) return null;
-  return `R${String(y).padStart(2, "0")}.${String(mo).padStart(2, "0")}`;
+  const dd = Number(m[3] ?? m[4]);
+  const day = dd >= 1 && dd <= 31 ? `.${String(dd).padStart(2, "0")}` : "";
+  return `R${String(y).padStart(2, "0")}.${String(mo).padStart(2, "0")}${day}`;
 }
 function normalize(field, v) {
   if (v === undefined || v === null) return null;
